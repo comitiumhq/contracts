@@ -1,0 +1,32 @@
+{
+  "fuzzing": {
+    "workers": 4,
+    "workerResetLimit": 50,
+    "timeout": 300,
+    "testLimit": 50000,
+    "callSequenceLength": 100,
+    "deploymentOrder": ["MedusaFundFlowProperties"],
+    "targetContracts": ["MedusaFundFlowProperties"],
+    "testing": {
+      "propertyTesting": {
+        "enabled": true,
+        "testPrefixes": ["property_"]
+      },
+      "assertionTesting": {
+        "enabled": true
+      },
+      "optimizationTesting": {
+        "enabled": false
+      }
+    }
+  },
+  "compilation": {
+    "platform": "crytic-compile",
+    "platformConfig": {
+      "target": ".",
+      "solcVersion": "",
+      "exportDirectory": "",
+      "args": ["--foundry-compile-all"]
+    }
+  }
+}

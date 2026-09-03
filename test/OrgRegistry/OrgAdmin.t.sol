@@ -1,0 +1,192 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.35;
+
+import {IOrgRegistry} from "../../src/interfaces/IOrgRegistry.sol";
+import {IJobFunds} from "../../src/interfaces/IJobFunds.sol";
+import {OperatorAuthorizer} from "../../src/abstract/OperatorAuthorizer.sol";
+import {Errors} from "../../src/Errors.sol";
+
+import {OrgTestBase} from "../shared/OrgTestBase.sol";
+
+/// @title OrgAdminTest
+/// @notice Tests for protocol-level admin functions (pause, operator, commitment routing, contentURI)
+contract OrgAdminTest is OrgTestBase {
+    uint256 orgId;
+
+    function setUp() public override {
+        super.setUp();
+        orgId = _createOrg(orgOwner1, "test.com");
+    }
+
+    function test_renounceOwnership_reverts() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(Errors.RenounceDisabled.selector);
+        registry.renounceOwnership();
+
+        assertEq(registry.owner(), contractOwner);
+    }
+
+    // ============ pause/unpause ============
+
+    function test_pause_blocksCreation() public {
+        vm.prank(contractOwner);
+        registry.pause();
+
+        uint256 keyNonce = _nextDomainKeyNonce();
+        uint256 expiry = block.timestamp + 1 hours;
+        bytes memory sig = _signDomain("new.com", orgOwner2, keyNonce, expiry);
+
+        vm.prank(orgOwner2);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        registry.createOrg(_domainHash("new.com"), keyNonce, expiry, sig);
+    }
+
+    function test_jobFundsPause_blocksDeposit() public {
+        vm.prank(contractOwner);
+        jobFunds.pause();
+
+        vm.prank(orgOwner1);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        jobFunds.depositWithAuthorization(orgId, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
+    }
+
+    function test_unpause() public {
+        vm.startPrank(contractOwner);
+        registry.pause();
+        registry.unpause();
+        vm.stopPrank();
+
+        // Should work after unpause
+        _fundAndDeposit(orgId, orgOwner1, 1_000_000);
+        assertEq(jobFunds.availableBalance(orgId), 1_000_000);
+    }
+
+    // ============ addOperator ============
+
+    function test_addOperator() public {
+        address newOperator = makeAddr("newOperator");
+
+        vm.expectEmit(true, true, true, true);
+        emit OperatorAuthorizer.OperatorUpdated(newOperator, true, contractOwner);
+
+        vm.prank(contractOwner);
+        registry.addOperator(newOperator);
+
+        assertTrue(registry.isOperator(newOperator));
+        assertTrue(registry.isOperator(operator));
+    }
+
+    function test_addOperator_revert_zeroAddress() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        registry.addOperator(address(0));
+    }
+
+    function test_addOperator_revert_notOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", stranger));
+        registry.addOperator(makeAddr("x"));
+    }
+
+    // ============ removeOperator ============
+
+    function test_removeOperator() public {
+        address newOperator = makeAddr("newOperator");
+        vm.prank(contractOwner);
+        registry.addOperator(newOperator);
+
+        vm.expectEmit(true, true, true, true);
+        emit OperatorAuthorizer.OperatorUpdated(newOperator, false, contractOwner);
+
+        vm.prank(contractOwner);
+        registry.removeOperator(newOperator);
+
+        assertFalse(registry.isOperator(newOperator));
+        assertTrue(registry.isOperator(operator));
+    }
+
+    function test_removeOperator_revert_notOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", stranger));
+        registry.removeOperator(operator);
+    }
+
+    // ============ commitment routing ============
+
+    function test_registerJobCommitmentAndSetCurrent() public {
+        address newJobCommitment = _deployTestCommitment();
+
+        vm.expectEmit(true, true, true, true);
+        emit IJobFunds.JobCommitmentRegistered(newJobCommitment, 1);
+
+        vm.prank(contractOwner);
+        jobFunds.registerJobCommitment(newJobCommitment, 1);
+
+        vm.expectEmit(true, true, true, true);
+        emit IJobFunds.CurrentJobCommitmentUpdated(address(0), newJobCommitment);
+
+        vm.prank(contractOwner);
+        jobFunds.setCurrentJobCommitment(newJobCommitment);
+
+        assertEq(jobFunds.currentJobCommitment(), newJobCommitment);
+    }
+
+    function test_registerJobCommitment_revert_zeroAddress() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        jobFunds.registerJobCommitment(address(0), 1);
+    }
+
+    function test_registerJobCommitment_revert_notContract() public {
+        address notContract = makeAddr("notContract");
+
+        vm.prank(contractOwner);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ContractExpected.selector, notContract));
+        jobFunds.registerJobCommitment(notContract, 1);
+    }
+
+    function test_registerJobCommitment_revert_wrongVersion() public {
+        address commitment = _deployTestCommitment();
+
+        vm.prank(contractOwner);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidJobCommitment.selector, commitment));
+        jobFunds.registerJobCommitment(commitment, 2);
+    }
+
+    // ============ updateContentURI ============
+
+    function test_updateContentURI() public {
+        vm.expectEmit(true, true, true, true);
+        emit IOrgRegistry.ContentURIUpdated(orgId, orgOwner1, "ipfs://QmNewMetadata");
+
+        vm.prank(orgOwner1);
+        registry.updateContentURI(orgId, "ipfs://QmNewMetadata");
+    }
+
+    function test_updateContentURI_revert_notOrgAdmin() public {
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(Errors.NotOrgAdmin.selector, orgId, stranger));
+        registry.updateContentURI(orgId, "ipfs://QmNewMetadata");
+    }
+
+    function test_updateContentURI_revert_emptyContentURI() public {
+        vm.prank(orgOwner1);
+        vm.expectRevert(Errors.EmptyContentURI.selector);
+        registry.updateContentURI(orgId, "");
+    }
+
+    // ============ View Functions ============
+
+    function test_operators_returnsActiveOperators() public {
+        address newOperator = makeAddr("newOperator");
+
+        vm.prank(contractOwner);
+        registry.addOperator(newOperator);
+
+        address[] memory operators = registry.operators();
+
+        assertEq(operators.length, 2);
+        assertEq(operators[0], operator);
+        assertEq(operators[1], newOperator);
+    }
+}

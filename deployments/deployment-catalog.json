@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "deployments": {
+    "84532": {
+      "deploymentSetVersion": 1,
+      "network": "base_sepolia",
+      "deployer": "0x94b391990C65A24c3FB2a86f9a3B6774990C1C1A",
+      "stakeToken": "0x61479Fd8c77084d715D72A1E417fd48A92002819",
+      "startBlock": 46334458,
+      "deployedAtBlock": 46334458,
+      "deployedAtTimestamp": 1788437204,
+      "gitCommit": "3954598",
+      "script": "script/Deploy.s.sol",
+      "contracts": {
+        "forwarder": "0xe6AbCB4b206096E2585F1189Ca8c39F5A77d99db",
+        "orgRegistry": {
+          "address": "0xEB3c11766f8269B0995F924Ee543e074A7c87E70",
+          "domainSeparator": "0x8bfaaa58707d34e2d987e585774ebb3e5e26643df2c73f3a3822d74e33754ac6",
+          "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
+          "initialOperators": [
+            "0xc3c8F6dAD80E1aDe28F850f534cD7239589d486c"
+          ]
+        },
+        "jobFunds": {
+          "address": "0x38A7493Cb8b41E161E7570acDCFCCA7deCBfaB8b",
+          "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
+          "initialFeeRecipient": "0x50DFC7e7893c7567fA638880e46e5525C9480193"
+        },
+        "jobCommitments": [
+          {
+            "commitmentVersion": 1,
+            "address": "0x873596614bc5307ed375e40CE1EF1Ac027b7eF45",
+            "startBlock": 46334458,
+            "domainSeparator": "0x0d4fa8e9ab98b7a7dc3c88cbe6785c15f1c090524aa13cef428293aaa970d988",
+            "runtimeCodeHash": "0x3990bf040ea04ae4650047eea59b46d6cc084628a45c85e2d4f30b3211a42650",
+            "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
+            "initialOperators": [
+              "0xc3c8F6dAD80E1aDe28F850f534cD7239589d486c"
+            ],
+            "initialExecutors": [
+              "0xC008ce3b02CC1F82DFCFaee18ef8eD9f5fDa9ecA"
+            ],
+            "initialConfigHashes": {
+              "jobConfig": "0x53440e4f5ffccf154dd40ca2fdaebc06469454f61c0bfaff62caca830f87f0e1",
+              "feeTiers": "0xe20f9a582cf02046acab7727777bc959d8ec822656f7adb896ff5c934c9bf03a",
+              "applicantStakeAmount": "0x26b6cc58385df0a50eef6bfe69ac639e575d6e79606106dead333340d3668b89"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+# Foundry
+/out
+/cache
+/.gas-snapshot
+*.log
+
+# Dependencies
+/node_modules
+
+# Environment
+.env
+
+# Coverage
+/coverage
+/coverage.json
+/coverage-report
+lcov.info
+
+# IDE
+.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# OS
+.DS_Store
+*.pem
+
+# Slither / Medusa
+/crytic-export
+**/crytic-export/
+**/.medusa-artifact-hash
+**/slither_results.json
+
+# Misc
+*.swp
+*.swo

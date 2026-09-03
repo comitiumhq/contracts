@@ -1,0 +1,4 @@
+{
+  "filter_paths": "lib|test|script",
+  "detectors_to_exclude": "timestamp,naming-convention,uninitialized-state,constable-states,divide-before-multiply,incorrect-equality,shadowing-local,uninitialized-local,unused-state"
+}

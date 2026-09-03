@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible problem in the Comitium contracts
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a problem.
+  - type: input
+    id: contract
+    attributes:
+      label: Contract or component
+      placeholder: JobFunds
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and the expected invariant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: Include a minimal test or transaction sequence when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add relevant, non-sensitive environment or deployment details.

@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Nightly symbolic + fuzz run. Keeps the Halmos proofs and Medusa invariants from silently rotting.
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Foundry project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+
+      - name: Show Forge version
+        run: |
+          forge --version
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Run Forge lint
+        run: forge lint
+
+      - name: Run Forge build
+        run: |
+          forge build --sizes
+        id: build
+
+      - name: Run Forge tests
+        run: |
+          forge test -vvv
+        id: test
+
+      - name: Check gas snapshots
+        run: make gas-check
+
+  fuzz:
+    name: Symbolic + fuzz (nightly)
+    runs-on: ubuntu-latest
+    # Heavy job — only on the nightly schedule or a manual dispatch, never blocking PRs.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Halmos
+        run: pip install halmos==0.3.3
+
+      # Halmos needs the solc AST in the build artifacts; prime it so a cached non-AST build can't skip it.
+      - name: Build with AST
+        run: forge build --ast
+
+      # Only the checks that prove deterministically. check_harsh_monotonic_in_onTime and
+      # check_soft_monotonic_in_onTime are solver-timeout-prone (uint/uint division blows the path count
+      # to 86 and the SMT queries never discharge); that same monotonicity is fuzzed to convergence in
+      # SlashingMonotonicity.t.sol under the forge job.
+      - name: Run Halmos symbolic proofs
+        run: |
+          halmos --contract HalmosFeeArithmetic
+          halmos --contract HalmosSlashing --function check_conservation_overSlashRate
+          halmos --contract HalmosSlashing --function check_rate_bounded_anyTable
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.22"
+
+      - name: Install Medusa
+        run: go install github.com/crytic/medusa@v1.5.1
+
+      # Medusa compiles through crytic-compile (see the medusa-*.json "platform"), which shells out to forge.
+      - name: Install crytic-compile
+        run: pip install crytic-compile
+
+      - name: Run Medusa fund-flow invariants
+        run: medusa fuzz --config test/medusa/medusa-fundflow.json
+
+      - name: Run Medusa lifecycle invariants
+        run: medusa fuzz --config test/medusa/medusa-lifecycle.json
