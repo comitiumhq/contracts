@@ -2,6 +2,7 @@
 pragma solidity 0.8.35;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 import {IJobFunds, OrgJobBalance, JobLock} from "../../src/interfaces/IJobFunds.sol";
 import {IOrgRegistry} from "../../src/interfaces/IOrgRegistry.sol";
@@ -291,6 +292,116 @@ contract JobFundsIntegrationTest is OrgTestBase {
         vm.prank(treasury);
         vm.expectRevert(MockUSDC.AuthorizationExpired.selector);
         jobFunds.depositWithAuthorization(authorizationOrgId, amount, validAfter, validBefore, nonce, v, r, s);
+    }
+
+    function test_depositWithAuthorization_atValidAfter_preservesStateAndAllowsRetry() public {
+        uint256 treasuryPrivateKey = 0xBEEF;
+        address treasury = vm.addr(treasuryPrivateKey);
+        uint256 authorizationOrgId = _createOrg(treasury, "not-yet-valid.test");
+        uint256 amount = 125_000_000;
+        uint256 validAfter = block.timestamp + 1 minutes;
+        uint256 validBefore = validAfter + 1 hours;
+        bytes32 nonce = keccak256("not-yet-valid-job-funds-deposit");
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signReceiveWithAuthorization(treasuryPrivateKey, treasury, amount, validAfter, validBefore, nonce);
+        uint256 tokenBalanceBefore = usdc.balanceOf(address(jobFunds));
+        uint256 accountedBefore = jobFunds.totalAccountedBalance();
+
+        usdc.mint(treasury, amount);
+        vm.warp(validAfter);
+
+        vm.prank(treasury);
+        vm.expectRevert(MockUSDC.AuthorizationNotYetValid.selector);
+        jobFunds.depositWithAuthorization(authorizationOrgId, amount, validAfter, validBefore, nonce, v, r, s);
+
+        assertEq(usdc.balanceOf(treasury), amount);
+        assertEq(usdc.balanceOf(address(jobFunds)), tokenBalanceBefore);
+        assertEq(jobFunds.availableBalance(authorizationOrgId), 0);
+        assertEq(jobFunds.totalAccountedBalance(), accountedBefore);
+        assertFalse(usdc.authorizationState(treasury, nonce));
+
+        vm.warp(validAfter + 1);
+        vm.prank(treasury);
+        jobFunds.depositWithAuthorization(authorizationOrgId, amount, validAfter, validBefore, nonce, v, r, s);
+
+        assertEq(usdc.balanceOf(treasury), 0);
+        assertEq(usdc.balanceOf(address(jobFunds)), tokenBalanceBefore + amount);
+        assertEq(jobFunds.availableBalance(authorizationOrgId), amount);
+        assertEq(jobFunds.totalAccountedBalance(), accountedBefore + amount);
+        assertTrue(usdc.authorizationState(treasury, nonce));
+    }
+
+    function test_depositWithAuthorization_wrongAmount_preservesStateAndAllowsRetry() public {
+        uint256 treasuryPrivateKey = 0xBEEF;
+        address treasury = vm.addr(treasuryPrivateKey);
+        uint256 authorizationOrgId = _createOrg(treasury, "wrong-amount.test");
+        uint256 amount = 125_000_000;
+        uint256 validAfter = 0;
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("wrong-amount-job-funds-deposit");
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signReceiveWithAuthorization(treasuryPrivateKey, treasury, amount, validAfter, validBefore, nonce);
+        uint256 tokenBalanceBefore = usdc.balanceOf(address(jobFunds));
+        uint256 accountedBefore = jobFunds.totalAccountedBalance();
+
+        usdc.mint(treasury, amount + 1);
+
+        vm.prank(treasury);
+        vm.expectRevert(MockUSDC.InvalidAuthorizationSigner.selector);
+        jobFunds.depositWithAuthorization(authorizationOrgId, amount + 1, validAfter, validBefore, nonce, v, r, s);
+
+        assertEq(usdc.balanceOf(treasury), amount + 1);
+        assertEq(usdc.balanceOf(address(jobFunds)), tokenBalanceBefore);
+        assertEq(jobFunds.availableBalance(authorizationOrgId), 0);
+        assertEq(jobFunds.totalAccountedBalance(), accountedBefore);
+        assertFalse(usdc.authorizationState(treasury, nonce));
+
+        vm.prank(treasury);
+        jobFunds.depositWithAuthorization(authorizationOrgId, amount, validAfter, validBefore, nonce, v, r, s);
+
+        assertEq(usdc.balanceOf(treasury), 1);
+        assertEq(usdc.balanceOf(address(jobFunds)), tokenBalanceBefore + amount);
+        assertEq(jobFunds.availableBalance(authorizationOrgId), amount);
+        assertEq(jobFunds.totalAccountedBalance(), accountedBefore + amount);
+        assertTrue(usdc.authorizationState(treasury, nonce));
+    }
+
+    function test_depositWithAuthorization_insufficientTokens_preservesStateAndAllowsRetry() public {
+        uint256 treasuryPrivateKey = 0xBEEF;
+        address treasury = vm.addr(treasuryPrivateKey);
+        uint256 authorizationOrgId = _createOrg(treasury, "insufficient-tokens.test");
+        uint256 amount = 125_000_000;
+        uint256 validAfter = 0;
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("insufficient-tokens-job-funds-deposit");
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signReceiveWithAuthorization(treasuryPrivateKey, treasury, amount, validAfter, validBefore, nonce);
+        uint256 tokenBalanceBefore = usdc.balanceOf(address(jobFunds));
+        uint256 accountedBefore = jobFunds.totalAccountedBalance();
+
+        usdc.mint(treasury, amount - 1);
+
+        vm.prank(treasury);
+        vm.expectRevert(
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, treasury, amount - 1, amount)
+        );
+        jobFunds.depositWithAuthorization(authorizationOrgId, amount, validAfter, validBefore, nonce, v, r, s);
+
+        assertEq(usdc.balanceOf(treasury), amount - 1);
+        assertEq(usdc.balanceOf(address(jobFunds)), tokenBalanceBefore);
+        assertEq(jobFunds.availableBalance(authorizationOrgId), 0);
+        assertEq(jobFunds.totalAccountedBalance(), accountedBefore);
+        assertFalse(usdc.authorizationState(treasury, nonce));
+
+        usdc.mint(treasury, 1);
+        vm.prank(treasury);
+        jobFunds.depositWithAuthorization(authorizationOrgId, amount, validAfter, validBefore, nonce, v, r, s);
+
+        assertEq(usdc.balanceOf(treasury), 0);
+        assertEq(usdc.balanceOf(address(jobFunds)), tokenBalanceBefore + amount);
+        assertEq(jobFunds.availableBalance(authorizationOrgId), amount);
+        assertEq(jobFunds.totalAccountedBalance(), accountedBefore + amount);
+        assertTrue(usdc.authorizationState(treasury, nonce));
     }
 
     function test_deposit_fromContractTreasury() public {
