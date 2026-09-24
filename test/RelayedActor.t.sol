@@ -230,24 +230,23 @@ contract RelayedActorTest is JobCommitmentTestBase {
         bytes32 applicationId = _generateApplicationId(applicant1);
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory applicationSignature =
-            _signApplication(applicationId, applicant1, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry);
+            _signApplication(applicationId, applicant1, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry);
 
         _forwardAs(
             applicant1,
             address(jobCommitment),
             abi.encodeCall(
                 jobCommitment.submitApplication,
-                (applicationId, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, applicationSignature)
+                (applicationId, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, applicationSignature)
             )
         );
 
         ApplicationView memory application = jobCommitment.application(applicationId);
 
         assertEq(application.applicant, applicant1);
-        assertEq(application.stake, APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(applicant1), applicantBalanceBefore - APPLICANT_STAKE);
+        assertEq(usdc.balanceOf(applicant1), applicantBalanceBefore);
 
-        bytes32 directApplicationId = _applyToJob(applicant1);
+        bytes32 directApplicationId = _submitApplication(applicant1);
         bytes32 responseId = _generateResponseId(directApplicationId);
 
         vm.expectRevert(Errors.NotExecutor.selector);
@@ -282,15 +281,9 @@ contract RelayedActorTest is JobCommitmentTestBase {
         assertEq(revertData, abi.encodeWithSelector(Errors.NotJobManager.selector, DEFAULT_ORG_ID, applicant1));
     }
 
-    // ============ Owner-control spoof resistance ============
-    // A relayed call appends the actor as a 20-byte suffix, but OwnerControls._msgSender() deliberately
-    // returns the raw sender (the forwarder), so onlyOwner can never be satisfied through the ERC-2771
-    // forwarder — even when the real owner signs the forward request. If _msgSender() ever regressed to
-    // _actor(), these would fail, which is exactly the regression we want to catch.
+    // Owner-only controls use the raw caller, even when the owner signs a forwarded request.
 
     function test_forwardedCallCannotSpoofOwner_jobCommitmentPause() public {
-        // Sanity control: a direct owner call works, so the revert below is caused by the forwarding,
-        // not by an incorrect owner address.
         vm.prank(owner);
         jobCommitment.pause();
         assertTrue(jobCommitment.paused());

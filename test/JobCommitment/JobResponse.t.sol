@@ -13,8 +13,7 @@ uint256 constant TEST_MAX_BATCH_SIZE = 50;
 /// @notice Tests for responding to applications
 contract JobResponseTest is JobCommitmentTestBase {
     function test_recordApplicationResponse_success() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         _respondToApplication(appId);
 
@@ -24,8 +23,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_emitsEvent() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
         bytes32 responseId = _generateResponseId(appId);
 
         vm.expectEmit(true, true, false, true);
@@ -36,8 +34,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_eventTopicMatchesAbi() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
         bytes32 responseId = _generateResponseId(appId);
 
         vm.recordLogs();
@@ -64,8 +61,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_exactlyAtDeadline_succeeds() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
         ApplicationView memory before = jobCommitment.application(appId);
 
         vm.warp(before.responseDeadline);
@@ -77,8 +73,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_alreadyResponded_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         _respondToApplication(appId);
 
@@ -86,20 +81,6 @@ contract JobResponseTest is JobCommitmentTestBase {
         vm.prank(executor);
         vm.expectRevert(abi.encodeWithSelector(Errors.ApplicationAlreadyResponded.selector, appId));
         jobCommitment.recordApplicationResponse(appId, responseId);
-    }
-
-    function test_recordApplicationResponse_onUnpublishedJob_success() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
-
-        // Close job first
-        _unpublishJob(jobId);
-
-        // Respond is gated by onlyExecutor and remains allowed after close.
-        _respondToApplication(appId);
-
-        ApplicationView memory app = jobCommitment.application(appId);
-        assertTrue(app.isResponded);
     }
 
     function test_recordApplicationResponse_applicationNotFound_reverts() public {
@@ -118,8 +99,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_zeroResponseId_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         vm.prank(executor);
         vm.expectRevert(Errors.ZeroResponseId.selector);
@@ -127,8 +107,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_nonExecutor_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         bytes32 responseId = _generateResponseId(appId);
         vm.prank(employer);
@@ -137,8 +116,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_operatorCannotExecute() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
         bytes32 responseId = _generateResponseId(appId);
 
         vm.prank(operator);
@@ -147,8 +125,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponse_executor_success() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         _respondToApplicationAs(appId, executor);
 
@@ -159,9 +136,8 @@ contract JobResponseTest is JobCommitmentTestBase {
     // ============ Batch Respond Tests ============
 
     function test_recordApplicationResponses_success() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
@@ -178,8 +154,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_singleApplication() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         bytes32[] memory appIds = new bytes32[](1);
         appIds[0] = appId;
@@ -191,9 +166,8 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_emitsEventsForEach() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
@@ -222,15 +196,13 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_arrayLengthMismatch_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
         appIds[1] = appId2;
 
-        // Only one responseId for two applications
         bytes32[] memory responseIds = new bytes32[](1);
         responseIds[0] = _generateResponseId(appId1);
 
@@ -240,8 +212,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_applicationNotFound_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
+        bytes32 appId1 = _submitApplication(applicant1);
         bytes32 fakeAppId = keccak256("nonexistent");
 
         bytes32[] memory appIds = new bytes32[](2);
@@ -258,14 +229,11 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_alreadyResponded_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
-        // Respond to appId1 individually first
         _respondToApplication(appId1);
 
-        // Batch includes already-responded appId1
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
         appIds[1] = appId2;
@@ -280,8 +248,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_zeroApplicationId_revertsAtomically() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId;
         appIds[1] = bytes32(0);
@@ -297,9 +264,8 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_zeroResponseId_revertsAtomically() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
         appIds[1] = appId2;
@@ -316,8 +282,7 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_nonExecutor_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         bytes32[] memory appIds = new bytes32[](1);
         appIds[0] = appId;
@@ -331,9 +296,8 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_executor_success() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
@@ -348,10 +312,8 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_duplicateApplicationId_reverts() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
-        // Same applicationId twice in batch
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId;
         appIds[1] = appId;
@@ -366,14 +328,12 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_whenPaused_allowed() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
         vm.prank(owner);
         jobCommitment.pause();
 
-        // Response recording works when paused.
         bytes32[] memory appIds = new bytes32[](2);
         appIds[0] = appId1;
         appIds[1] = appId2;
@@ -387,14 +347,12 @@ contract JobResponseTest is JobCommitmentTestBase {
     // ============ Batch Size Limit Tests ============
 
     function test_recordApplicationResponses_exactlyMaxBatchSize_succeeds() public {
-        uint256 jobId = _publishJob(0);
         uint256 count = TEST_MAX_BATCH_SIZE;
 
         bytes32[] memory appIds = new bytes32[](count);
         for (uint256 i = 0; i < count; i++) {
             address applicantAddr = makeAddr(string(abi.encodePacked("applicant", i)));
-            _fundApplicant(applicantAddr);
-            appIds[i] = _applyToJob(jobId, applicantAddr);
+            appIds[i] = _submitApplication(applicantAddr);
         }
 
         _batchRespondToApplications(appIds);
@@ -405,15 +363,13 @@ contract JobResponseTest is JobCommitmentTestBase {
     }
 
     function test_recordApplicationResponses_exceedsMaxBatchSize_reverts() public {
-        uint256 jobId = _publishJob(0);
         uint256 count = TEST_MAX_BATCH_SIZE + 1;
 
         bytes32[] memory appIds = new bytes32[](count);
         bytes32[] memory responseIds = new bytes32[](count);
         for (uint256 i = 0; i < count; i++) {
             address applicantAddr = makeAddr(string(abi.encodePacked("applicant", i)));
-            _fundApplicant(applicantAddr);
-            appIds[i] = _applyToJob(jobId, applicantAddr);
+            appIds[i] = _submitApplication(applicantAddr);
             responseIds[i] = _generateResponseId(appIds[i]);
         }
 

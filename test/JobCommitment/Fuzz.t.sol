@@ -3,7 +3,7 @@ pragma solidity 0.8.35;
 
 import {JobCommitmentTestBase} from "../shared/TestBase.sol";
 import {Errors} from "../../src/Errors.sol";
-import {TEST_APPLICANT_STAKE, TEST_MIN_STAKE} from "../shared/TestBase.sol";
+import {TEST_MIN_STAKE} from "../shared/TestBase.sol";
 
 /// @title FuzzTest
 /// @notice Fuzz tests for JobCommitment contract
@@ -22,26 +22,6 @@ contract FuzzTest is JobCommitmentTestBase {
         _executeJobPublishWithFee(
             employer, DEFAULT_ORG_ID, stake, 0, expectedFee, "QmFuzz", keyNonce, expiry, signature
         );
-    }
-
-    // ============ Apply to Job Fuzz Tests ============
-
-    function testFuzz_submitApplication_nonCurrentStake_reverts(uint96 stake) public {
-        _publishJob(0);
-        vm.assume(stake != TEST_APPLICANT_STAKE);
-
-        address applicant = makeAddr("fuzzApplicant");
-        usdc.mint(applicant, stake);
-        vm.prank(applicant);
-        usdc.approve(address(jobCommitment), type(uint256).max);
-
-        bytes32 applicationId = _generateApplicationId(applicant);
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signApplication(applicationId, applicant, stake, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry);
-
-        vm.prank(applicant);
-        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidApplicantStake.selector, stake, TEST_APPLICANT_STAKE));
-        jobCommitment.submitApplication(applicationId, stake, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, sig);
     }
 
     // ============ Fee Tier Fuzz Tests ============

@@ -7,12 +7,12 @@ import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.
 import {JobCommitment} from "../../src/JobCommitment.sol";
 import {OrgRegistry} from "../../src/OrgRegistry.sol";
 import {JobFunds} from "../../src/JobFunds.sol";
-import {IJobCommitment, ApplicationView} from "../../src/interfaces/IJobCommitment.sol";
+import {IJobCommitment} from "../../src/interfaces/IJobCommitment.sol";
 import {IJobFunds} from "../../src/interfaces/IJobFunds.sol";
 import {JobStatus} from "../../src/types/JobTypes.sol";
 import {IOrgRegistry} from "../../src/interfaces/IOrgRegistry.sol";
 import {USDC} from "../mocks/USDC.sol";
-import {JobCommitmentTestBase, TEST_APPLICANT_STAKE} from "../shared/TestBase.sol";
+import {JobCommitmentTestBase} from "../shared/TestBase.sol";
 
 contract ReentrantUSDC is USDC {
     address public target;
@@ -64,18 +64,14 @@ contract ReentrantUSDC is USDC {
 contract ReentrantJobCommitmentCaller {
     IJobCommitment private immutable _jobCommitment;
     IJobFunds private immutable _jobFunds;
-    IERC20 private immutable _stakeToken;
     address private immutable _feeRecipient;
 
-    bytes32 private _applicationId;
     uint256 private _orgId;
     uint256 private _jobId;
     uint256 private _jobStake;
     uint256 private _jobFee;
     uint8 private _feeTier;
     string private _contentURI;
-    uint96 private _applicantStake;
-    uint8 private _responseDeadlineDays;
     uint32 private _totalApplications;
     uint32 private _respondedApplications;
     uint32 private _onTimeResponses;
@@ -84,26 +80,10 @@ contract ReentrantJobCommitmentCaller {
     uint256 private _expiry;
     bytes private _signature;
 
-    constructor(IJobCommitment jobCommitment_, IJobFunds jobFunds_, IERC20 stakeToken_, address feeRecipient_) {
+    constructor(IJobCommitment jobCommitment_, IJobFunds jobFunds_, address feeRecipient_) {
         _jobCommitment = jobCommitment_;
         _jobFunds = jobFunds_;
-        _stakeToken = stakeToken_;
         _feeRecipient = feeRecipient_;
-        _stakeToken.approve(address(_jobCommitment), type(uint256).max);
-    }
-
-    function configureSubmit(
-        bytes32 applicationId_,
-        uint96 applicantStake_,
-        uint8 responseDeadlineDays_,
-        uint256 expiry_,
-        bytes calldata signature_
-    ) external {
-        _applicationId = applicationId_;
-        _applicantStake = applicantStake_;
-        _responseDeadlineDays = responseDeadlineDays_;
-        _expiry = expiry_;
-        _signature = signature_;
     }
 
     function configureCreate(
@@ -160,10 +140,6 @@ contract ReentrantJobCommitmentCaller {
         _counterSnapshotRoot = counterSnapshotRoot_;
     }
 
-    function configureWithdraw(bytes32 applicationId_) external {
-        _applicationId = applicationId_;
-    }
-
     function publishJob() external {
         bytes memory signature = _signature;
         _jobFunds.publishJob(
@@ -174,11 +150,6 @@ contract ReentrantJobCommitmentCaller {
             _feeRecipient,
             abi.encode(_feeTier, _contentURI, _keyNonce, _expiry, signature)
         );
-    }
-
-    function submitApplication() external {
-        bytes memory signature = _signature;
-        _jobCommitment.submitApplication(_applicationId, _applicantStake, _responseDeadlineDays, _expiry, signature);
     }
 
     function closeJob() external {
@@ -193,10 +164,6 @@ contract ReentrantJobCommitmentCaller {
             _expiry,
             signature
         );
-    }
-
-    function withdrawStake() external {
-        _jobCommitment.withdrawStake(_applicationId);
     }
 
     function settleExpiredJob() external {
@@ -229,15 +196,7 @@ contract ReentrancyTest is JobCommitmentTestBase {
             IERC20(address(usdc)), IOrgRegistry(address(orgRegistry)), feeRecipient, owner, address(forwarder)
         );
         jobCommitment = new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            jobFunds, owner, address(forwarder), operator, executor, _defaultJobConfig(), _defaultFeeTiers()
         );
 
         uint32 commitmentVersion = jobCommitment.commitmentVersion();
@@ -252,39 +211,6 @@ contract ReentrancyTest is JobCommitmentTestBase {
         _fundAndDepositWithAuthorization(
             jobFunds, address(usdc), employerPrivateKey, DEFAULT_ORG_ID, ORG_OPERATIONAL_BALANCE
         );
-
-        _fundApplicant(applicant1);
-        _fundApplicant(applicant2);
-    }
-
-    function test_reentrancy_submitApplication_blocksNestedApplication() public {
-        _publishJob(0);
-
-        ReentrantJobCommitmentCaller attacker = _deployAttacker();
-        bytes32 attackerApplicationId = _configureAttackerSubmit(attacker);
-        bytes32 outerApplicationId = _generateApplicationId(applicant1);
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signApplication(
-            outerApplicationId, applicant1, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry
-        );
-
-        _maliciousToken()
-            .setAttack(
-                address(attacker), false, true, abi.encodeCall(ReentrantJobCommitmentCaller.submitApplication, ())
-            );
-
-        vm.prank(applicant1);
-        jobCommitment.submitApplication(
-            outerApplicationId, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, signature
-        );
-
-        assertTrue(jobCommitment.isApplicationIdUsed(outerApplicationId));
-        assertFalse(jobCommitment.isApplicationIdUsed(attackerApplicationId));
-        assertFalse(_maliciousToken().lastAttackSucceeded());
-        assertEq(_maliciousToken().lastAttackRevertData(), _reentrancyGuardRevert());
-        assertEq(jobCommitment.totalApplicantStakes(), APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(address(jobCommitment)), APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(address(attacker)), APPLICANT_STAKE);
     }
 
     function test_reentrancy_publishJob_blocksNestedCreate() public {
@@ -310,9 +236,6 @@ contract ReentrancyTest is JobCommitmentTestBase {
 
     function test_reentrancy_closeJob_blocksNestedClose() public {
         uint256 outerJobId = _publishJob(0);
-        bytes32 appId = _applyToJob(outerJobId, applicant1);
-        _respondToApplicationLate(appId);
-
         uint256 nestedJobId = _publishJob(0);
         _unpublishJob(outerJobId);
         _unpublishJob(nestedJobId);
@@ -336,65 +259,8 @@ contract ReentrancyTest is JobCommitmentTestBase {
         assertEq(_maliciousToken().lastAttackRevertData(), _reentrancyGuardRevert());
     }
 
-    function test_reentrancy_withdrawStake_blocksNestedWithdrawal() public {
-        _publishJob(0);
-
-        bytes32 outerApplicationId = _applyToJob(applicant1);
-        ReentrantJobCommitmentCaller attacker = _deployAttacker();
-        bytes32 attackerApplicationId = _submitApplicationFromAttacker(attacker);
-
-        _respondToApplication(outerApplicationId);
-        _respondToApplication(attackerApplicationId);
-
-        uint256 applicantBalanceBefore = usdc.balanceOf(applicant1);
-        uint256 attackerBalanceBefore = usdc.balanceOf(address(attacker));
-        attacker.configureWithdraw(attackerApplicationId);
-        _maliciousToken()
-            .setAttack(address(attacker), true, false, abi.encodeCall(ReentrantJobCommitmentCaller.withdrawStake, ()));
-
-        vm.prank(applicant1);
-        jobCommitment.withdrawStake(outerApplicationId);
-
-        ApplicationView memory outerApplication = jobCommitment.application(outerApplicationId);
-        ApplicationView memory attackerApplication = jobCommitment.application(attackerApplicationId);
-        assertTrue(outerApplication.stakeWithdrawn);
-        assertFalse(attackerApplication.stakeWithdrawn);
-        assertFalse(_maliciousToken().lastAttackSucceeded());
-        assertEq(_maliciousToken().lastAttackRevertData(), _reentrancyGuardRevert());
-        assertEq(jobCommitment.totalApplicantStakes(), APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(applicant1), applicantBalanceBefore + APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(address(attacker)), attackerBalanceBefore);
-        assertEq(usdc.balanceOf(address(jobCommitment)), APPLICANT_STAKE);
-    }
-
-    function test_reentrancy_rescueTokens_blocksNestedWithdrawal() public {
-        _publishJob(0);
-
-        ReentrantJobCommitmentCaller attacker = _deployAttacker();
-        bytes32 attackerApplicationId = _submitApplicationFromAttacker(attacker);
-        _respondToApplication(attackerApplicationId);
-
-        usdc.mint(address(jobCommitment), APPLICANT_STAKE);
-        attacker.configureWithdraw(attackerApplicationId);
-        _maliciousToken()
-            .setAttack(address(attacker), true, false, abi.encodeCall(ReentrantJobCommitmentCaller.withdrawStake, ()));
-
-        uint256 ownerBalanceBefore = usdc.balanceOf(owner);
-        vm.prank(owner);
-        jobCommitment.rescueTokens(address(usdc), owner, APPLICANT_STAKE);
-
-        ApplicationView memory attackerApplication = jobCommitment.application(attackerApplicationId);
-        assertFalse(attackerApplication.stakeWithdrawn);
-        assertFalse(_maliciousToken().lastAttackSucceeded());
-        assertEq(_maliciousToken().lastAttackRevertData(), _reentrancyGuardRevert());
-        assertEq(jobCommitment.totalApplicantStakes(), APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(owner), ownerBalanceBefore + APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(address(jobCommitment)), APPLICANT_STAKE);
-    }
-
     function test_reentrancy_settleExpiredJob_blocksNestedSettle() public {
         uint256 outerJobId = _publishJob(0);
-        _applyToJob(outerJobId, applicant1);
         _unpublishJob(outerJobId);
         _warpToExpiration(outerJobId);
 
@@ -417,19 +283,8 @@ contract ReentrancyTest is JobCommitmentTestBase {
 
     function _deployAttacker() private returns (ReentrantJobCommitmentCaller attacker) {
         attacker = new ReentrantJobCommitmentCaller(
-            IJobCommitment(address(jobCommitment)), IJobFunds(address(jobFunds)), IERC20(address(usdc)), feeRecipient
+            IJobCommitment(address(jobCommitment)), IJobFunds(address(jobFunds)), feeRecipient
         );
-        usdc.mint(address(attacker), APPLICANT_STAKE);
-    }
-
-    function _configureAttackerSubmit(ReentrantJobCommitmentCaller attacker) private returns (bytes32 applicationId) {
-        applicationId = _generateApplicationId(address(attacker));
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signApplication(
-            applicationId, address(attacker), APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry
-        );
-
-        attacker.configureSubmit(applicationId, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, signature);
     }
 
     function _configureAttackerCreate(ReentrantJobCommitmentCaller attacker) private {
@@ -457,14 +312,6 @@ contract ReentrancyTest is JobCommitmentTestBase {
         bytes memory signature = _signJobClose(jobId, 0, 0, 0, counterSnapshotRoot, keyNonce, expiry);
 
         attacker.configureClose(jobId, 0, 0, 0, counterSnapshotRoot, keyNonce, expiry, signature);
-    }
-
-    function _submitApplicationFromAttacker(ReentrantJobCommitmentCaller attacker)
-        private
-        returns (bytes32 applicationId)
-    {
-        applicationId = _configureAttackerSubmit(attacker);
-        attacker.submitApplication();
     }
 
     function _maliciousToken() private view returns (ReentrantUSDC) {

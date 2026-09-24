@@ -26,29 +26,21 @@ contract ProtocolOperationsGasTest is JobCommitmentTestBase {
     }
 
     function test_gas_submitApplication() public {
-        _applyToJob(applicant1);
+        _submitApplication(applicant1);
 
         vm.snapshotGasLastCall(SNAPSHOT_GROUP, "submit application");
     }
 
     function test_gas_recordApplicationResponse() public {
-        bytes32 applicationId = _applyToJob(applicant1);
+        bytes32 applicationId = _submitApplication(applicant1);
         _respondToApplication(applicationId);
 
         vm.snapshotGasLastCall(SNAPSHOT_GROUP, "record application response");
     }
 
-    function test_gas_withdrawApplicantStake() public {
-        bytes32 applicationId = _applyToJob(applicant1);
-        _respondToApplication(applicationId);
-        _withdrawStake(applicationId, applicant1);
-
-        vm.snapshotGasLastCall(SNAPSHOT_GROUP, "withdraw applicant stake");
-    }
-
     function test_gas_closeJob() public {
         uint256 jobId = _publishJob(1);
-        bytes32 applicationId = _applyToJob(applicant1);
+        bytes32 applicationId = _submitApplication(applicant1);
         _respondToApplication(applicationId);
         _closeJob(jobId, 1, 1, 1);
 
@@ -57,7 +49,7 @@ contract ProtocolOperationsGasTest is JobCommitmentTestBase {
 
     function test_gas_settleExpiredJob() public {
         uint256 jobId = _publishJob(1);
-        _applyToJob(applicant1);
+        _submitApplication(applicant1);
         vm.warp(block.timestamp + TEST_MAX_PUBLISHED_DURATION + 1);
         _settleExpiredJob(jobId, 1, 0, 0);
 

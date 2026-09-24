@@ -70,10 +70,6 @@ contract JobFundsHandler is Test {
 
     // ---- IJobCommitmentModule (so JobFunds accepts registration) ----
 
-    function stakeToken() external view returns (IERC20) {
-        return IERC20(address(_usdc));
-    }
-
     function jobFunds() external view returns (IJobFunds) {
         return IJobFunds(address(_jobFunds));
     }

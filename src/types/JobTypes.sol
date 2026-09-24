@@ -28,7 +28,7 @@ struct Job {
     /// @notice Timestamp when the job was created.
     uint40 createdAt;
 
-    /// @notice Timestamp when the job was unpublished and stopped accepting applications.
+    /// @notice Timestamp when the job was unpublished.
     uint40 unpublishedAt;
 
     /// @notice Timestamp when the job was closed and settled.
@@ -53,18 +53,15 @@ struct Job {
     uint96 feeAmount;
 }
 
-/// @notice Privacy-preserving application data keyed by opaque applicationId.
+/// @notice On-chain application state keyed by an opaque application ID.
 struct Application {
     /// @notice Account that submitted the application.
     address applicant;
 
-    /// @notice Applicant application stake held by this contract (USDC 6 decimals).
-    uint96 stake;
-
     /// @notice Timestamp when the application was submitted.
     uint40 appliedAt;
 
-    /// @notice Timestamp by which a response unlocks the applicant stake.
+    /// @notice Timestamp by which the employer should respond.
     uint40 responseDeadline;
 
     /// @notice Timestamp when an executor marked the application as responded.
@@ -72,7 +69,4 @@ struct Application {
 
     /// @notice Whether the application has been responded to.
     bool isResponded;
-
-    /// @notice Whether the applicant stake has been withdrawn.
-    bool stakeWithdrawn;
 }

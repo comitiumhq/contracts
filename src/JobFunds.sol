@@ -100,7 +100,7 @@ contract JobFunds is IJobFunds, OwnerControls {
     }
 
     /// @inheritdoc IJobFunds
-    /// @dev Withdrawals stay available while paused so owners are not trapped by an operational pause.
+    /// @dev Org treasuries can withdraw during an operational pause.
     function withdraw(uint256 orgId, uint256 amount) external nonReentrant {
         address actor = _actor();
         address orgTreasury_ = _requireOrgTreasury(orgId, actor);
@@ -372,12 +372,6 @@ contract JobFunds is IJobFunds, OwnerControls {
 
         try registered.commitmentVersion() returns (uint32 version) {
             if (version != expectedVersion) return false;
-        } catch {
-            return false;
-        }
-
-        try registered.stakeToken() returns (IERC20 token) {
-            if (address(token) != address(stakeToken)) return false;
         } catch {
             return false;
         }

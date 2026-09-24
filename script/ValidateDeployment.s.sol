@@ -81,35 +81,30 @@ contract ValidateDeployment is BaseScript, Test {
 
         string memory path = _deploymentPath();
 
-        catalog = ParsedDeploymentCatalog({
-            deploymentSetVersion: vm.parseJsonUint(json, string.concat(path, ".deploymentSetVersion")),
-            network: vm.parseJsonString(json, string.concat(path, ".network")),
-            deployer: vm.parseJsonAddress(json, string.concat(path, ".deployer")),
-            stakeToken: vm.parseJsonAddress(json, string.concat(path, ".stakeToken")),
-            startBlock: vm.parseJsonUint(json, string.concat(path, ".startBlock")),
-            deployedAtBlock: vm.parseJsonUint(json, string.concat(path, ".deployedAtBlock")),
-            deployedAtTimestamp: vm.parseJsonUint(json, string.concat(path, ".deployedAtTimestamp")),
-            gitCommit: vm.parseJsonString(json, string.concat(path, ".gitCommit")),
-            forwarder: vm.parseJsonAddress(json, string.concat(path, ".contracts.forwarder")),
-            orgRegistry: DeploymentOrgRegistry({
-                address_: vm.parseJsonAddress(json, string.concat(path, ".contracts.orgRegistry.address")),
-                domainSeparator: vm.parseJsonBytes32(
-                    json, string.concat(path, ".contracts.orgRegistry.domainSeparator")
-                ),
-                initialOwner: vm.parseJsonAddress(json, string.concat(path, ".contracts.orgRegistry.initialOwner")),
-                initialOperators: vm.parseJsonAddressArray(
-                    json, string.concat(path, ".contracts.orgRegistry.initialOperators")
-                )
-            }),
-            jobFunds: DeploymentJobFunds({
-                address_: vm.parseJsonAddress(json, string.concat(path, ".contracts.jobFunds.address")),
-                initialOwner: vm.parseJsonAddress(json, string.concat(path, ".contracts.jobFunds.initialOwner")),
-                initialFeeRecipient: vm.parseJsonAddress(
-                    json, string.concat(path, ".contracts.jobFunds.initialFeeRecipient")
-                )
-            }),
-            jobCommitments: _parseJobCommitments(json, path)
-        });
+        catalog.deploymentSetVersion = vm.parseJsonUint(json, string.concat(path, ".deploymentSetVersion"));
+        catalog.network = vm.parseJsonString(json, string.concat(path, ".network"));
+        catalog.deployer = vm.parseJsonAddress(json, string.concat(path, ".deployer"));
+        catalog.stakeToken = vm.parseJsonAddress(json, string.concat(path, ".stakeToken"));
+        catalog.startBlock = vm.parseJsonUint(json, string.concat(path, ".startBlock"));
+        catalog.deployedAtBlock = vm.parseJsonUint(json, string.concat(path, ".deployedAtBlock"));
+        catalog.deployedAtTimestamp = vm.parseJsonUint(json, string.concat(path, ".deployedAtTimestamp"));
+        catalog.gitCommit = vm.parseJsonString(json, string.concat(path, ".gitCommit"));
+        catalog.forwarder = vm.parseJsonAddress(json, string.concat(path, ".contracts.forwarder"));
+
+        catalog.orgRegistry.address_ = vm.parseJsonAddress(json, string.concat(path, ".contracts.orgRegistry.address"));
+        catalog.orgRegistry.domainSeparator =
+            vm.parseJsonBytes32(json, string.concat(path, ".contracts.orgRegistry.domainSeparator"));
+        catalog.orgRegistry.initialOwner =
+            vm.parseJsonAddress(json, string.concat(path, ".contracts.orgRegistry.initialOwner"));
+        catalog.orgRegistry.initialOperators =
+            vm.parseJsonAddressArray(json, string.concat(path, ".contracts.orgRegistry.initialOperators"));
+
+        catalog.jobFunds.address_ = vm.parseJsonAddress(json, string.concat(path, ".contracts.jobFunds.address"));
+        catalog.jobFunds.initialOwner =
+            vm.parseJsonAddress(json, string.concat(path, ".contracts.jobFunds.initialOwner"));
+        catalog.jobFunds.initialFeeRecipient =
+            vm.parseJsonAddress(json, string.concat(path, ".contracts.jobFunds.initialFeeRecipient"));
+        catalog.jobCommitments = _parseJobCommitments(json, path);
     }
 
     function _parseJobCommitments(string memory json, string memory deploymentPath)
@@ -141,10 +136,7 @@ contract ValidateDeployment is BaseScript, Test {
                 initialExecutors: vm.parseJsonAddressArray(json, string.concat(path, ".initialExecutors")),
                 initialConfigHashes: DeploymentConfigHashes({
                     jobConfig: vm.parseJsonBytes32(json, string.concat(path, ".initialConfigHashes.jobConfig")),
-                    feeTiers: vm.parseJsonBytes32(json, string.concat(path, ".initialConfigHashes.feeTiers")),
-                    applicantStakeAmount: vm.parseJsonBytes32(
-                        json, string.concat(path, ".initialConfigHashes.applicantStakeAmount")
-                    )
+                    feeTiers: vm.parseJsonBytes32(json, string.concat(path, ".initialConfigHashes.feeTiers"))
                 })
             });
         }
@@ -222,7 +214,6 @@ contract ValidateDeployment is BaseScript, Test {
                 "JobFunds: registered commitment version mismatch"
             );
             assertEq(commitment.commitmentVersion(), entry.commitmentVersion, "JobCommitment: version mismatch");
-            assertEq(address(commitment.stakeToken()), catalog.stakeToken, "JobCommitment: stakeToken mismatch");
             assertEq(address(commitment.jobFunds()), catalog.jobFunds.address_, "JobCommitment: jobFunds mismatch");
             assertEq(commitment.trustedForwarder(), catalog.forwarder, "JobCommitment: forwarder mismatch");
             assertEq(commitment.DOMAIN_SEPARATOR(), entry.domainSeparator, "JobCommitment: domain mismatch");
@@ -251,7 +242,6 @@ contract ValidateDeployment is BaseScript, Test {
             JobCommitment commitment = JobCommitment(entry.address_);
             JobConfig memory config = commitment.jobConfig(1);
             FeeTier[] memory tiers = commitment.feeTiers(1);
-            uint96 applicantStakeAmount = commitment.applicantStakeAmount();
 
             _assertAcceptedOwnership("JobCommitment", entry.address_, entry.initialOwner);
             _assertDisjointRoles(entry.initialOperators, entry.initialExecutors);
@@ -266,11 +256,6 @@ contract ValidateDeployment is BaseScript, Test {
                 keccak256(abi.encode(tiers)),
                 entry.initialConfigHashes.feeTiers,
                 "JobCommitment: initial fee tiers hash mismatch"
-            );
-            assertEq(
-                keccak256(abi.encode(applicantStakeAmount)),
-                entry.initialConfigHashes.applicantStakeAmount,
-                "JobCommitment: initial applicant stake hash mismatch"
             );
         }
     }

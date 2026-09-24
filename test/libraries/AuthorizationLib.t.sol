@@ -34,7 +34,7 @@ contract AuthorizationLibTest is Test {
         );
         assertEq(
             JobAuthorizationLib.APPLICATION_TYPEHASH,
-            0x25dbafae65dde213615a1497f0f70fc6864f6c6ddffc43ce51732a62f56418df,
+            0xe2d955395daec500734d9c439eabd7e1e018212fdb7590d8bdb0d852a4a5a9be,
             "Application typehash drifted"
         );
         assertEq(
@@ -103,11 +103,10 @@ contract AuthorizationLibTest is Test {
 
     function test_hashApplication_matchesManualVector() public pure {
         bytes32 applicationId = keccak256("application");
-        bytes32 expected = keccak256(
-            abi.encode(APPLICATION_TYPEHASH, applicationId, address(0xCAFE), uint96(3_000_000), uint8(7), uint256(456))
-        );
+        bytes32 expected =
+            keccak256(abi.encode(APPLICATION_TYPEHASH, applicationId, address(0xCAFE), uint8(7), uint256(456)));
 
-        assertEq(JobAuthorizationLib.hashApplication(applicationId, address(0xCAFE), 3_000_000, 7, 456), expected);
+        assertEq(JobAuthorizationLib.hashApplication(applicationId, address(0xCAFE), 7, 456), expected);
     }
 
     function test_hashJobClose_matchesManualVector() public pure {
@@ -210,8 +209,7 @@ contract AuthorizationLibTest is Test {
     }
 
     function test_hashApplication_recoversSigner() public view {
-        bytes32 structHash =
-            JobAuthorizationLib.hashApplication(keccak256("application"), address(0xCAFE), 3_000_000, 7, 456);
+        bytes32 structHash = JobAuthorizationLib.hashApplication(keccak256("application"), address(0xCAFE), 7, 456);
 
         _assertRoundTrip(structHash);
     }

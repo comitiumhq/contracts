@@ -12,7 +12,6 @@ error UnsupportedDeploymentCatalogSchema(uint256 schemaVersion);
 struct DeploymentConfigHashes {
     bytes32 jobConfig;
     bytes32 feeTiers;
-    bytes32 applicantStakeAmount;
 }
 
 struct DeploymentOrgRegistry {
@@ -230,8 +229,6 @@ abstract contract BaseScript is Script {
             _quoted(vm.toString(hashes.jobConfig)),
             ',"feeTiers":',
             _quoted(vm.toString(hashes.feeTiers)),
-            ',"applicantStakeAmount":',
-            _quoted(vm.toString(hashes.applicantStakeAmount)),
             "}"
         );
     }

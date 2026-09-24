@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-import {JobCommitmentTestBase, TEST_APPLICANT_STAKE, TEST_MAX_UNPUBLISHED_DURATION} from "../shared/TestBase.sol";
+import {JobCommitmentTestBase, TEST_MAX_UNPUBLISHED_DURATION} from "../shared/TestBase.sol";
 import {JobCommitment} from "../../src/JobCommitment.sol";
 import {IJobFunds} from "../../src/interfaces/IJobFunds.sol";
 import {Errors} from "../../src/Errors.sol";
@@ -11,48 +9,23 @@ import {FeeTier, JobConfig} from "../../src/types/ConfigTypes.sol";
 import {JobExpiryStatus} from "../../src/types/JobTypes.sol";
 
 contract JobCommitmentEdgeCasesTest is JobCommitmentTestBase {
-    function test_constructor_zeroStakeToken_reverts() public {
-        vm.expectRevert(Errors.ZeroAddress.selector);
-        new JobCommitment(
-            IERC20(address(0)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
-        );
-    }
-
     function test_constructor_zeroJobFunds_reverts() public {
         vm.expectRevert(Errors.ZeroAddress.selector);
         new JobCommitment(
-            IERC20(address(usdc)),
             IJobFunds(address(0)),
             owner,
             address(forwarder),
             operator,
             executor,
             _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            _defaultFeeTiers()
         );
     }
 
     function test_constructor_zeroOperator_reverts() public {
         vm.expectRevert(Errors.ZeroAddress.selector);
         new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            address(0),
-            executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            jobFunds, owner, address(forwarder), address(0), executor, _defaultJobConfig(), _defaultFeeTiers()
         );
     }
 
@@ -62,61 +35,27 @@ contract JobCommitmentEdgeCasesTest is JobCommitmentTestBase {
         FeeTier[] memory tiers = _twoFeeTiers();
 
         vm.expectPartialRevert(Errors.ConfigValueOutOfRange.selector);
-        new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            executor,
-            config,
-            tiers,
-            TEST_APPLICANT_STAKE
-        );
+        new JobCommitment(jobFunds, owner, address(forwarder), operator, executor, config, tiers);
     }
 
     function test_constructor_zeroExecutor_reverts() public {
         vm.expectRevert(Errors.ZeroAddress.selector);
         new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            address(0),
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            jobFunds, owner, address(forwarder), operator, address(0), _defaultJobConfig(), _defaultFeeTiers()
         );
     }
 
     function test_constructor_overlappingRoles_reverts() public {
         vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, operator));
         new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            operator,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            jobFunds, owner, address(forwarder), operator, operator, _defaultJobConfig(), _defaultFeeTiers()
         );
     }
 
     function test_constructor_trustedForwarderExecutor_reverts() public {
         vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, address(forwarder)));
         new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            address(forwarder),
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            jobFunds, owner, address(forwarder), operator, address(forwarder), _defaultJobConfig(), _defaultFeeTiers()
         );
     }
 
@@ -171,25 +110,6 @@ contract JobCommitmentEdgeCasesTest is JobCommitmentTestBase {
         jobCommitment.addOperator(newOperator);
     }
 
-    function testFuzz_nonApplicant_canReturnEligibleStake(address caller) public {
-        vm.assume(caller != applicant1);
-        vm.assume(caller != address(jobCommitment));
-        vm.assume(caller != address(0));
-
-        _publishJob(0);
-        bytes32 appId = _applyToJob(applicant1);
-        _respondToApplication(appId);
-
-        uint256 applicantBalanceBefore = usdc.balanceOf(applicant1);
-        uint256 callerBalanceBefore = usdc.balanceOf(caller);
-
-        vm.prank(caller);
-        jobCommitment.withdrawStake(appId);
-
-        assertEq(usdc.balanceOf(applicant1), applicantBalanceBefore + APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(caller), callerBalanceBefore);
-    }
-
     function testFuzz_expiredSignature_publishJob(uint256 pastTime) public {
         pastTime = bound(pastTime, 1, block.timestamp);
         uint256 expiry = block.timestamp - pastTime;
@@ -209,11 +129,11 @@ contract JobCommitmentEdgeCasesTest is JobCommitmentTestBase {
         uint256 expiry = block.timestamp - pastTime;
 
         bytes32 appId = keccak256("expired-app");
-        bytes memory sig = _signApplication(appId, applicant1, APPLICANT_STAKE_96, 3, expiry);
+        bytes memory sig = _signApplication(appId, applicant1, 3, expiry);
 
         vm.prank(applicant1);
         vm.expectRevert(Errors.SignatureExpired.selector);
-        jobCommitment.submitApplication(appId, APPLICANT_STAKE_96, 3, expiry, sig);
+        jobCommitment.submitApplication(appId, 3, expiry, sig);
     }
 
     function testFuzz_nonExecutor_cannotSettleExpiredJob(address caller) public {

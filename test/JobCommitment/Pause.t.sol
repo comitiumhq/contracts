@@ -25,29 +25,24 @@ contract PauseTest is JobCommitmentTestBase {
     }
 
     function test_pause_submitApplication_reverts() public {
-        _publishJob(0);
-
         vm.prank(owner);
         jobCommitment.pause();
 
         bytes32 applicationId = keccak256("testAppId");
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig =
-            _signApplication(applicationId, applicant1, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry);
+        bytes memory sig = _signApplication(applicationId, applicant1, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry);
 
         vm.prank(applicant1);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        jobCommitment.submitApplication(applicationId, APPLICANT_STAKE_96, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, sig);
+        jobCommitment.submitApplication(applicationId, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, sig);
     }
 
     function test_pause_recordApplicationResponse_allowed() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         vm.prank(owner);
         jobCommitment.pause();
 
-        // Response recording is not pause-gated, so orgs can fulfill obligations during pause.
         _respondToApplication(appId);
         _assertApplicationResponded(appId);
     }
@@ -79,43 +74,6 @@ contract PauseTest is JobCommitmentTestBase {
 
         assertTrue(jobCommitment.job(jobId).orgStakeSettled);
         assertEq(_getOrgAvailableBalance(DEFAULT_ORG_ID), availableBefore + EMPLOYER_STAKE);
-    }
-
-    function test_pause_withdraw_allowed() public {
-        // Withdrawals bypass pause — user funds safety
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
-        _respondToApplication(appId);
-
-        vm.prank(owner);
-        jobCommitment.pause();
-
-        uint256 balanceBefore = usdc.balanceOf(applicant1);
-        vm.prank(applicant1);
-        jobCommitment.withdrawStake(appId);
-
-        assertEq(usdc.balanceOf(applicant1), balanceBefore + APPLICANT_STAKE);
-    }
-
-    function test_pause_withdrawStakes_allowed() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
-        _respondToApplication(appId);
-
-        vm.prank(owner);
-        jobCommitment.pause();
-
-        bytes32[] memory appIds = new bytes32[](1);
-        appIds[0] = appId;
-
-        uint256 balanceBefore = usdc.balanceOf(applicant1);
-        vm.prank(makeAddr("stake-return-worker"));
-        (uint16 returnedCount, uint16 skippedCount, uint256 totalReturned) = jobCommitment.withdrawStakes(appIds);
-
-        assertEq(returnedCount, 1);
-        assertEq(skippedCount, 0);
-        assertEq(totalReturned, APPLICANT_STAKE);
-        assertEq(usdc.balanceOf(applicant1), balanceBefore + APPLICANT_STAKE);
     }
 
     function test_pause_settleExpiredJob_allowed() public {

@@ -128,7 +128,6 @@ contract JobLifecycleTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobUnpublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
 
-        // Sign with wrong key
         uint256 wrongKey = 0x9999;
         bytes32 structHash = keccak256(abi.encode(JOB_UNPUBLISH_TYPEHASH, jobId, employer, keyNonce, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
@@ -145,7 +144,6 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
         uint256 keyNonce = _nextJobUnpublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        // Sign for employer but applicant1 calls → closer mismatch in signature
         bytes memory signature = _signJobUnpublish(jobId, employer, keyNonce, expiry);
 
         vm.prank(applicant1);
@@ -171,7 +169,6 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
         _unpublishJob(jobId);
 
-        // Second close with fresh signature still fails (status check, not nonce)
         uint256 keyNonce = _nextJobUnpublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature = _signJobUnpublish(jobId, employer, keyNonce, expiry);
@@ -195,7 +192,7 @@ contract JobLifecycleTest is JobCommitmentTestBase {
         assertTrue(job.orgStakeSettled);
     }
 
-    function test_closeJob_success_noApplications() public {
+    function test_closeJob_success_zeroCounters() public {
         uint256 jobId = _publishJob(0);
         uint256 orgOpBalBefore = _getOrgOperationalBalance(DEFAULT_ORG_ID);
 
@@ -205,15 +202,12 @@ contract JobLifecycleTest is JobCommitmentTestBase {
         assertEq(uint8(job.status), uint8(JobStatus.Closed));
         assertTrue(job.orgStakeSettled);
 
-        // Full stake returned to org (no slashing when no applications)
         uint256 orgOpBalAfter = _getOrgOperationalBalance(DEFAULT_ORG_ID);
         assertEq(orgOpBalAfter, orgOpBalBefore);
     }
 
     function test_closeJob_nonZeroCountersRequireSnapshotRoot() public {
         uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
-        _respondToApplication(appId);
         _unpublishJob(jobId);
 
         uint256 keyNonce = _nextJobCloseKeyNonce();
@@ -227,17 +221,11 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
     function test_closeJob_allOnTime_noSlash() public {
         uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
-
-        _respondToApplication(appId1);
-        _respondToApplication(appId2);
-
         uint256 orgOpBalBefore = _getOrgOperationalBalance(DEFAULT_ORG_ID);
+
         _unpublishJob(jobId);
         _closeJob(jobId, 2, 2, 2);
 
-        // 100% on-time → 0% slash
         uint256 orgOpBalAfter = _getOrgOperationalBalance(DEFAULT_ORG_ID);
         assertEq(orgOpBalAfter, orgOpBalBefore);
     }
@@ -311,35 +299,15 @@ contract JobLifecycleTest is JobCommitmentTestBase {
         jobCommitment.closeJob(jobId, 0, 0, 0, counterSnapshotRoot, keyNonce, expiry, signature);
     }
 
-    function test_closeJob_someLate_softSlash() public {
+    function test_closeJob_70percentOnTime_usesSoftSlash() public {
         uint256 jobId = _publishJob(0);
-
-        bytes32[] memory appIds = new bytes32[](10);
-        for (uint256 i = 0; i < 10; i++) {
-            address app = makeAddr(string.concat("app_", vm.toString(i)));
-            _fundApplicant(app);
-            appIds[i] = _applyToJob(jobId, app);
-        }
-
-        // Respond to 7 on-time
-        for (uint256 i = 0; i < 7; i++) {
-            _respondToApplication(appIds[i]);
-        }
-
-        // Respond to 3 late
-        for (uint256 i = 7; i < 10; i++) {
-            _respondToApplicationLate(appIds[i]);
-        }
-
         uint256 orgOpBalBefore = _getOrgOperationalBalance(DEFAULT_ORG_ID);
         uint256 burnAddressBefore = usdc.balanceOf(SLASH_BURN_ADDRESS);
         uint256 feeRecipientBalanceBefore = usdc.balanceOf(feeRecipient);
 
-        // Close with operator-attested counters: 10 total, 10 responded, 7 on-time.
         _unpublishJob(jobId);
         _closeJob(jobId, 10, 10, 7);
 
-        // 70% on-time → 12% slash (1200 bps, soft table)
         uint256 expectedSlash = (EMPLOYER_STAKE * 1200) / 10_000;
 
         assertEq(_getOrgOperationalBalance(DEFAULT_ORG_ID), orgOpBalBefore - expectedSlash);
@@ -348,22 +316,13 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
     function test_closeJob_allLateAllResponded_30pctSoftSlash() public {
         uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
-
-        // Respond to both late
-        _respondToApplicationLate(appId1);
-        _respondToApplicationLate(appId2);
-
         uint256 orgOpBalBefore = _getOrgOperationalBalance(DEFAULT_ORG_ID);
         uint256 burnAddressBefore = usdc.balanceOf(SLASH_BURN_ADDRESS);
         uint256 feeRecipientBalanceBefore = usdc.balanceOf(feeRecipient);
 
-        // Close with 0 on-time responses.
         _unpublishJob(jobId);
         _closeJob(jobId, 2, 2, 0);
 
-        // 0% on-time → 30% slash (soft table max)
         uint256 expectedSlash = (EMPLOYER_STAKE * 3000) / 10_000;
 
         assertEq(_getOrgOperationalBalance(DEFAULT_ORG_ID), orgOpBalBefore - expectedSlash);
@@ -372,14 +331,8 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
     function test_closeJob_notAllResponded_reverts() public {
         uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        _applyToJob(jobId, applicant2);
-
-        _respondToApplication(appId1);
-        // applicant2 not responded
         _unpublishJob(jobId);
 
-        // Operator attests 2 total, 1 responded — should revert
         uint256 keyNonce = _nextJobCloseKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signJobClose(jobId, 2, 1, 1, _counterSnapshotRoot(2), keyNonce, expiry);
@@ -390,12 +343,8 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
     function test_closeJob_fromUnpublishedStatus_success() public {
         uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
-
         _unpublishJob(jobId);
-
-        _respondToApplication(appId);
-        _closeJob(jobId, 1, 1, 1);
+        _closeJob(jobId);
 
         JobView memory job = jobCommitment.job(jobId);
         assertEq(uint8(job.status), uint8(JobStatus.Closed));
@@ -472,11 +421,8 @@ contract JobLifecycleTest is JobCommitmentTestBase {
 
     function test_closeJob_onTimeExceedsResponded_reverts() public {
         uint256 jobId = _publishJob(0);
-        _applyToJob(jobId, applicant1);
-        _applyToJob(jobId, applicant2);
         _unpublishJob(jobId);
 
-        // Sign with invalid counters: onTime(3) > responded(2)
         uint256 keyNonce = _nextJobCloseKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signJobClose(jobId, 2, 2, 3, _counterSnapshotRoot(2), keyNonce, expiry);
@@ -489,7 +435,6 @@ contract JobLifecycleTest is JobCommitmentTestBase {
         uint256 jobId = _publishJob(0);
         _unpublishJob(jobId);
 
-        // Sign with invalid counters: responded(5) > total(3)
         uint256 keyNonce = _nextJobCloseKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signJobClose(jobId, 3, 5, 2, _counterSnapshotRoot(3), keyNonce, expiry);
@@ -506,7 +451,6 @@ contract JobLifecycleTest is JobCommitmentTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signJobClose(jobId, 0, 0, 0, _counterSnapshotRoot(0), keyNonce, expiry);
 
-        // Warp past expiry
         vm.warp(expiry + 1);
 
         vm.prank(employer);

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
 import {IJobFunds} from "./IJobFunds.sol";
 import {FeeTier, JobConfig} from "../types/ConfigTypes.sol";
 import {JobExpiryStatus, JobStatus} from "../types/JobTypes.sol";
@@ -27,36 +25,9 @@ struct JobView {
 /// @notice Application data returned by view functions
 struct ApplicationView {
     address applicant;
-    uint256 stake;
     uint256 appliedAt;
     uint256 responseDeadline;
     uint256 respondedAt;
-    bool isResponded;
-    bool stakeWithdrawn;
-}
-
-/// @notice Applicant stake return eligibility status.
-enum StakeReturnStatus {
-    Returnable,
-    ApplicationNotFound,
-    AlreadyWithdrawn,
-    NotReady
-}
-
-/// @notice Outcome emitted for every successfully processed stake-return command item.
-enum StakeReturnOutcome {
-    Returned,
-    AlreadyWithdrawn,
-    NotReady,
-    ApplicationNotFound
-}
-
-/// @notice Applicant stake return status and display data.
-struct StakeReturnInfo {
-    StakeReturnStatus status;
-    address applicant;
-    uint256 stake;
-    uint256 responseDeadline;
     bool isResponded;
 }
 
@@ -81,13 +52,9 @@ interface IJobCommitment {
 
     // ---- Events: Application ----
 
-    /// @notice Emitted when an applicant submits an application stake.
+    /// @notice Emitted when an applicant submits an application.
     event ApplicationSubmitted(
-        bytes32 indexed applicationId,
-        address indexed applicant,
-        uint256 stake,
-        uint256 responseDeadline,
-        bytes32 requestHash
+        bytes32 indexed applicationId, address indexed applicant, uint256 responseDeadline, bytes32 requestHash
     );
 
     // ---- Events: Response ----
@@ -97,7 +64,7 @@ interface IJobCommitment {
 
     // ---- Events: Job Lifecycle ----
 
-    /// @notice Emitted when a job is unpublished and stops accepting applications.
+    /// @notice Emitted when a job is unpublished.
     event JobUnpublished(uint256 indexed jobId, uint256 indexed orgId, address indexed actor);
 
     /// @notice Emitted when a job is closed and its organization stake is settled.
@@ -135,20 +102,10 @@ interface IJobCommitment {
         uint256 stakeSlashed
     );
 
-    // ---- Events: Withdrawal ----
-
-    /// @notice Emitted for every processed applicant stake-return item.
-    event ApplicantStakeReturnProcessed(
-        bytes32 indexed applicationId, address indexed applicant, uint256 amount, StakeReturnOutcome outcome
-    );
-
     // ---- Events: Config ----
 
     /// @notice Emitted when job config is updated
     event JobConfigUpdated(uint32 indexed version, JobConfig config, FeeTier[] tiers);
-
-    /// @notice Emitted when the exact applicant stake amount is updated.
-    event ApplicantStakeAmountUpdated(uint96 amount);
 
     // ---- Events: Rescue ----
 
@@ -185,13 +142,11 @@ interface IJobCommitment {
 
     /// @notice Submit an application authorized by an operator signature
     /// @param applicationId Unique non-zero application identifier
-    /// @param stake Protocol-selected application stake amount
     /// @param responseDeadlineDays Response deadline days from operator signature
     /// @param expiry Timestamp after which the signature expires
     /// @param signature Operator signature approving this application
     function submitApplication(
         bytes32 applicationId,
-        uint96 stake,
         uint8 responseDeadlineDays,
         uint256 expiry,
         bytes calldata signature
@@ -257,26 +212,6 @@ interface IJobCommitment {
         bytes calldata signature
     ) external;
 
-    // ---- Withdrawal ----
-
-    /// @notice Withdraw applicant stake after response or deadline passed
-    /// @param applicationId Application to withdraw stake from
-    function withdrawStake(bytes32 applicationId) external;
-
-    /// @notice Return eligible applicant stakes in a bounded best-effort batch.
-    /// @param applicationIds Application IDs to return stake for
-    /// @return returnedCount Number of stakes returned
-    /// @return skippedCount Number of missing, withdrawn, or not-ready applications skipped
-    /// @return totalReturned Total stake returned
-    function withdrawStakes(bytes32[] calldata applicationIds)
-        external
-        returns (uint16 returnedCount, uint16 skippedCount, uint256 totalReturned);
-
-    /// @notice Get applicant stake return eligibility details.
-    /// @param applicationId Application ID to query
-    /// @return info Return eligibility and display data
-    function stakeReturnInfo(bytes32 applicationId) external view returns (StakeReturnInfo memory info);
-
     // ---- Expired Settlement ----
 
     /// @notice Settle an expired job using operator-attested counters (executor only)
@@ -304,12 +239,6 @@ interface IJobCommitment {
     /// @return canSettle Whether the job can be expired-settled
     /// @return status Reason the job can or cannot be expired-settled
     function expiredSettlementInfo(uint256 jobId) external view returns (bool canSettle, JobExpiryStatus status);
-
-    // ---- Invariant ----
-
-    /// @notice Get the total applicant stakes counter (for monitoring/invariant verification)
-    /// @return total Sum of all active (non-withdrawn) applicant stakes
-    function totalApplicantStakes() external view returns (uint256 total);
 
     // ---- Protocol Roles ----
 
@@ -346,18 +275,12 @@ interface IJobCommitment {
     /// @notice Get the latest job config.
     function currentJobConfig() external view returns (JobConfig memory);
 
-    /// @notice Get the current applicant stake amount.
-    function applicantStakeAmount() external view returns (uint96);
-
     /// @notice Check whether an application ID has already been consumed.
     /// @param applicationId Application ID to check.
     function isApplicationIdUsed(bytes32 applicationId) external view returns (bool);
 
     /// @notice Returns the EIP-712 domain separator.
     function DOMAIN_SEPARATOR() external view returns (bytes32);
-
-    /// @notice Stake token used for applicant stakes.
-    function stakeToken() external view returns (IERC20);
 
     /// @notice Contract that holds organization job funds and settles org stake.
     function jobFunds() external view returns (IJobFunds);

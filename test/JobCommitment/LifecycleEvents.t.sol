@@ -11,7 +11,7 @@ import {
     TEST_MAX_PUBLISHED_DURATION,
     TEST_MAX_UNPUBLISHED_DURATION
 } from "../shared/TestBase.sol";
-import {IJobCommitment, JobView, StakeReturnOutcome} from "../../src/interfaces/IJobCommitment.sol";
+import {IJobCommitment, JobView} from "../../src/interfaces/IJobCommitment.sol";
 
 /// @title LifecycleEventsTest
 /// @notice Asserts canonical lifecycle event payloads.
@@ -49,7 +49,7 @@ contract LifecycleEventsTest is JobCommitmentTestBase {
         bytes32 applicationId = _generateApplicationId(applicant1);
         uint8 deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signApplication(applicationId, applicant1, APPLICANT_STAKE_96, deadlineDays, expiry);
+        bytes memory sig = _signApplication(applicationId, applicant1, deadlineDays, expiry);
 
         uint256 expectedResponseDeadline = block.timestamp + uint256(deadlineDays) * 1 days;
 
@@ -57,48 +57,29 @@ contract LifecycleEventsTest is JobCommitmentTestBase {
         emit IJobCommitment.ApplicationSubmitted(
             applicationId,
             applicant1,
-            APPLICANT_STAKE,
             expectedResponseDeadline,
-            keccak256(
-                abi.encodeCall(
-                    jobCommitment.submitApplication, (applicationId, APPLICANT_STAKE_96, deadlineDays, expiry, sig)
-                )
-            )
+            keccak256(abi.encodeCall(jobCommitment.submitApplication, (applicationId, deadlineDays, expiry, sig)))
         );
 
         vm.prank(applicant1);
-        jobCommitment.submitApplication(applicationId, APPLICANT_STAKE_96, deadlineDays, expiry, sig);
+        jobCommitment.submitApplication(applicationId, deadlineDays, expiry, sig);
     }
 
     function test_applicationSubmitted_forwardedHashesCanonicalCalldata() public {
         bytes32 applicationId = _generateApplicationId(applicant1);
         uint8 deadlineDays = DEFAULT_RESPONSE_DEADLINE_DAYS;
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signApplication(applicationId, applicant1, APPLICANT_STAKE_96, deadlineDays, expiry);
-        bytes memory callData = abi.encodeCall(
-            jobCommitment.submitApplication, (applicationId, APPLICANT_STAKE_96, deadlineDays, expiry, sig)
-        );
+        bytes memory sig = _signApplication(applicationId, applicant1, deadlineDays, expiry);
+        bytes memory callData =
+            abi.encodeCall(jobCommitment.submitApplication, (applicationId, deadlineDays, expiry, sig));
         uint256 expectedResponseDeadline = block.timestamp + uint256(deadlineDays) * 1 days;
 
         vm.expectEmit(true, true, false, true, address(jobCommitment));
         emit IJobCommitment.ApplicationSubmitted(
-            applicationId, applicant1, APPLICANT_STAKE, expectedResponseDeadline, keccak256(callData)
+            applicationId, applicant1, expectedResponseDeadline, keccak256(callData)
         );
 
         _forwardAs(applicant1, address(jobCommitment), callData);
-    }
-
-    function test_applicantStakeReturnProcessed_emitsFullPayload() public {
-        bytes32 applicationId = _applyToJob(applicant1);
-        _respondToApplication(applicationId);
-
-        vm.expectEmit(true, true, false, true, address(jobCommitment));
-        emit IJobCommitment.ApplicantStakeReturnProcessed(
-            applicationId, applicant1, APPLICANT_STAKE, StakeReturnOutcome.Returned
-        );
-
-        vm.prank(applicant1);
-        jobCommitment.withdrawStake(applicationId);
     }
 
     function test_jobClosed_emitsCountersAndConservedStake() public {

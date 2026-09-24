@@ -16,11 +16,9 @@ import {OrgAuthorizationLib} from "../../src/libraries/OrgAuthorizationLib.sol";
 
 contract TestCommitmentRegistration {
     uint32 public constant commitmentVersion = 1;
-    IERC20 public immutable stakeToken;
     IJobFunds public immutable jobFunds;
 
-    constructor(IERC20 stakeToken_, IJobFunds jobFunds_) {
-        stakeToken = stakeToken_;
+    constructor(IJobFunds jobFunds_) {
         jobFunds = jobFunds_;
     }
 
@@ -176,10 +174,6 @@ abstract contract OrgTestBase is Eip3009TestHelper {
         return returned;
     }
 
-    function stakeToken() external view returns (IERC20) {
-        return IERC20(address(usdc));
-    }
-
     function commitmentVersion() external pure returns (uint32) {
         return 1;
     }
@@ -200,6 +194,6 @@ abstract contract OrgTestBase is Eip3009TestHelper {
     }
 
     function _deployTestCommitment() internal returns (address) {
-        return address(new TestCommitmentRegistration(IERC20(address(usdc)), IJobFunds(address(jobFunds))));
+        return address(new TestCommitmentRegistration(IJobFunds(address(jobFunds))));
     }
 }

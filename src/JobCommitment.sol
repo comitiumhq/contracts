@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-import {IJobCommitment, JobView, ApplicationView, StakeReturnInfo} from "./interfaces/IJobCommitment.sol";
+import {IJobCommitment, JobView, ApplicationView} from "./interfaces/IJobCommitment.sol";
 import {Errors} from "./Errors.sol";
 import {FeeTier, JobConfig} from "./types/ConfigTypes.sol";
 import {ConfigValidationLib} from "./libraries/ConfigValidationLib.sol";
@@ -24,15 +22,11 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
     uint32 public constant commitmentVersion = 1;
     // ============ Immutables ============
 
-    /// @notice The stake token (USDC)
-    IERC20 public immutable stakeToken;
-
     /// @notice The job funds contract.
     IJobFunds public immutable jobFunds;
 
     // ============ Constructor ============
 
-    /// @param stakeToken_ The stake token address (USDC)
     /// @param jobFunds_ The JobFunds contract
     /// @param owner_ The initial contract owner
     /// @param forwarder_ ERC-2771 forwarder for relayed job and application user operations.
@@ -40,46 +34,28 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
     /// @param executor_ The initial privileged direct-call executor address
     /// @param jobConfig_ Initial job configuration (version 1)
     /// @param feeTiers_ Initial fee tiers for config version 1
-    /// @param applicantStakeAmount_ Exact applicant stake amount
     constructor(
-        IERC20 stakeToken_,
         IJobFunds jobFunds_,
         address owner_,
         address forwarder_,
         address operator_,
         address executor_,
         JobConfig memory jobConfig_,
-        FeeTier[] memory feeTiers_,
-        uint96 applicantStakeAmount_
+        FeeTier[] memory feeTiers_
     ) OwnerControls(owner_, forwarder_) OperatorAuthorizer("JobCommitment", "1", operator_) {
-        if (address(stakeToken_) == address(0)) revert Errors.ZeroAddress();
         if (address(jobFunds_) == address(0)) revert Errors.ZeroAddress();
 
-        stakeToken = stakeToken_;
         jobFunds = jobFunds_;
 
         _addExecutorChecked(executor_);
 
         ConfigValidationLib.validateJobConfig(jobConfig_);
         ConfigValidationLib.validateFeeTiers(feeTiers_);
-        ConfigValidationLib.validateApplicantStakeAmount(applicantStakeAmount_);
-
         _currentConfigVersion = 1;
         _storeJobConfig(1, jobConfig_, feeTiers_);
-        _applicantStakeAmount = applicantStakeAmount_;
     }
 
     // ============ Internal Overrides ============
-
-    /// @dev Provides stake token to base contracts
-    function _stakeToken() internal view override(JobApplication) returns (IERC20) {
-        return stakeToken;
-    }
-
-    /// @dev Provides stake token for balance invariant check
-    function _stakeTokenForInvariant() internal view override returns (IERC20) {
-        return stakeToken;
-    }
 
     /// @dev Provides job funds for org authorization and lifecycle settlement.
     function _jobFunds() internal view override(JobPublish, JobLifecycle) returns (IJobFunds) {
@@ -120,12 +96,11 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
     /// @inheritdoc IJobCommitment
     function submitApplication(
         bytes32 applicationId,
-        uint96 stake,
         uint8 responseDeadlineDays,
         uint256 expiry,
         bytes calldata signature
     ) external whenNotPaused nonReentrant {
-        _submitApplication(applicationId, stake, responseDeadlineDays, expiry, signature, keccak256(_actorCalldata()));
+        _submitApplication(applicationId, responseDeadlineDays, expiry, signature, keccak256(_actorCalldata()));
     }
 
     /// @inheritdoc IJobCommitment
@@ -183,20 +158,6 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
         bytes calldata signature
     ) external whenNotPaused nonReentrant {
         _updateJobContentURI(jobId, contentURI, keyNonce, expiry, signature);
-    }
-
-    /// @inheritdoc IJobCommitment
-    function withdrawStake(bytes32 applicationId) external nonReentrant {
-        _withdrawStake(applicationId);
-    }
-
-    /// @inheritdoc IJobCommitment
-    function withdrawStakes(bytes32[] calldata applicationIds)
-        external
-        nonReentrant
-        returns (uint16 returnedCount, uint16 skippedCount, uint256 totalReturned)
-    {
-        return _withdrawStakes(applicationIds);
     }
 
     /// @inheritdoc IJobCommitment
@@ -260,28 +221,6 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
         emit JobConfigUpdated(version, config, tiers);
     }
 
-    /// @notice Set the exact applicant stake amount for new submissions.
-    /// @param newAmount New exact applicant stake amount.
-    function setApplicantStakeAmount(uint96 newAmount) external onlyOwner {
-        ConfigValidationLib.validateApplicantStakeAmount(newAmount);
-
-        if (newAmount == _applicantStakeAmount) revert Errors.ApplicantStakeAmountUnchanged(newAmount);
-
-        _applicantStakeAmount = newAmount;
-
-        emit ApplicantStakeAmountUpdated(newAmount);
-    }
-
-    /// @dev For stakeToken, only balance above totalApplicantStakes can be rescued.
-    function _validateTokenRescue(address token, uint256 amount) internal view override {
-        if (token == address(stakeToken)) {
-            uint256 balance = stakeToken.balanceOf(address(this));
-            uint256 surplus = balance > _totalApplicantStakes ? balance - _totalApplicantStakes : 0;
-
-            if (amount > surplus) revert Errors.RescueExceedsSurplus(amount, surplus);
-        }
-    }
-
     /// @dev Emits the commitment rescue event after the shared rescue transfer succeeds.
     function _emitTokensRescued(address token, address to, uint256 amount) internal override {
         emit TokensRescued(token, to, amount);
@@ -314,18 +253,11 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
 
         return ApplicationView({
             applicant: applicationData.applicant,
-            stake: applicationData.stake,
             appliedAt: applicationData.appliedAt,
             responseDeadline: applicationData.responseDeadline,
             respondedAt: applicationData.respondedAt,
-            isResponded: applicationData.isResponded,
-            stakeWithdrawn: applicationData.stakeWithdrawn
+            isResponded: applicationData.isResponded
         });
-    }
-
-    /// @inheritdoc IJobCommitment
-    function stakeReturnInfo(bytes32 applicationId) external view returns (StakeReturnInfo memory info) {
-        return _stakeReturnInfo(applicationId);
     }
 
     /// @inheritdoc IJobCommitment
@@ -363,11 +295,6 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
         return _isApplicationIdUsed(applicationId);
     }
 
-    /// @inheritdoc IJobCommitment
-    function totalApplicantStakes() external view returns (uint256 total) {
-        return _totalApplicantStakes;
-    }
-
     /// @notice Get current economic config version
     function currentConfigVersion() external view returns (uint32) {
         return _currentConfigVersion;
@@ -396,11 +323,6 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
     /// @notice Get current (latest) job config.
     function currentJobConfig() external view returns (JobConfig memory) {
         return _jobConfigs[_currentConfigVersion];
-    }
-
-    /// @notice Get the exact applicant stake amount for new submissions.
-    function applicantStakeAmount() external view returns (uint96) {
-        return _applicantStakeAmount;
     }
 
     /// @notice Store a job configuration version and its fee tiers.

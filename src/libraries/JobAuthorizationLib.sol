@@ -14,9 +14,8 @@ library JobAuthorizationLib {
         "JobPublish(uint256 orgId,uint256 stake,uint8 feeTier,string contentURI,address creator,uint32 configVersion,uint256 keyNonce,uint256 expiry)"
     );
 
-    bytes32 internal constant APPLICATION_TYPEHASH = keccak256(
-        "Application(bytes32 applicationId,address applicant,uint96 stake,uint8 responseDeadlineDays,uint256 expiry)"
-    );
+    bytes32 internal constant APPLICATION_TYPEHASH =
+        keccak256("Application(bytes32 applicationId,address applicant,uint8 responseDeadlineDays,uint256 expiry)");
 
     bytes32 internal constant JOB_CLOSE_TYPEHASH = keccak256(
         "JobClose(uint256 jobId,uint32 totalApplications,uint32 respondedApplications,uint32 onTimeResponses,bytes32 counterSnapshotRoot,address closer,uint256 keyNonce,uint256 expiry)"
@@ -58,16 +57,12 @@ library JobAuthorizationLib {
         );
     }
 
-    function hashApplication(
-        bytes32 applicationId,
-        address applicant,
-        uint96 stake,
-        uint8 responseDeadlineDays,
-        uint256 expiry
-    ) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(APPLICATION_TYPEHASH, applicationId, applicant, stake, responseDeadlineDays, expiry)
-        );
+    function hashApplication(bytes32 applicationId, address applicant, uint8 responseDeadlineDays, uint256 expiry)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(APPLICATION_TYPEHASH, applicationId, applicant, responseDeadlineDays, expiry));
     }
 
     function hashJobClose(

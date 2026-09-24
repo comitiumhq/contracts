@@ -722,19 +722,8 @@ contract JobFundsIntegrationTest is OrgTestBase {
         jobFunds.registerJobCommitment(badCommitment, 1);
     }
 
-    function test_registerJobCommitment_revert_wrongStakeToken() public {
-        USDC wrongToken = new USDC();
-        address badCommitment =
-            address(new TestCommitmentRegistration(IERC20(address(wrongToken)), IJobFunds(address(jobFunds))));
-
-        vm.prank(contractOwner);
-        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidJobCommitment.selector, badCommitment));
-        jobFunds.registerJobCommitment(badCommitment, 1);
-    }
-
     function test_registerJobCommitment_revert_wrongJobFunds() public {
-        address badCommitment =
-            address(new TestCommitmentRegistration(IERC20(address(usdc)), IJobFunds(makeAddr("wrongJobFunds"))));
+        address badCommitment = address(new TestCommitmentRegistration(IJobFunds(makeAddr("wrongJobFunds"))));
 
         vm.prank(contractOwner);
         vm.expectRevert(abi.encodeWithSelector(Errors.InvalidJobCommitment.selector, badCommitment));

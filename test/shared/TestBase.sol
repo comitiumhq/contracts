@@ -23,14 +23,10 @@ import {JobAuthorizationLib} from "../../src/libraries/JobAuthorizationLib.sol";
 import {OrgAuthorizationLib} from "../../src/libraries/OrgAuthorizationLib.sol";
 
 // ============ Test Constants ============
-// Default values matching constructor config — tests can't read storage configs easily in setup
 uint256 constant TEST_MIN_STAKE = 50_000_000;
 uint96 constant TEST_TIER_0_BASE_FEE = 25_000_000;
 uint96 constant TEST_TIER_1_BASE_FEE = 35_000_000;
 uint96 constant TEST_TIER_2_BASE_FEE = 50_000_000;
-uint96 constant TEST_APPLICANT_STAKE = 3_000_000;
-uint96 constant TEST_APPLICANT_STAKE_LOWER = 1_000_000;
-uint96 constant TEST_APPLICANT_STAKE_UPPER = 10_000_000;
 uint256 constant TEST_MAX_UNPUBLISHED_DURATION = 90 days;
 uint256 constant TEST_MAX_PUBLISHED_DURATION = 365 days;
 uint256 constant TEST_FEE_TIER_0 = 150;
@@ -68,8 +64,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
 
     // ============ Constants ============
     uint256 public constant EMPLOYER_STAKE = 500_000_000; // 500 USDC
-    uint256 public constant APPLICANT_STAKE = 3_000_000; // 3 USDC
-    uint96 public constant APPLICANT_STAKE_96 = 3_000_000; // typed mirror for signature helpers
     uint256 public constant DEFAULT_ORG_ID = 1;
     uint256 public constant ORG_OPERATIONAL_BALANCE = 100_000_000_000; // 100,000 USDC
     uint8 public constant DEFAULT_RESPONSE_DEADLINE_DAYS = 3; // tier 0
@@ -155,28 +149,16 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         usdc = new USDC();
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
-        // 1. Deploy OrgRegistry
         orgRegistry = new OrgRegistry(owner, address(forwarder), operator);
 
-        // 2. Deploy JobFunds
         jobFunds = new JobFunds(
             IERC20(address(usdc)), IOrgRegistry(address(orgRegistry)), feeRecipient, owner, address(forwarder)
         );
 
-        // 3. Deploy JobCommitment with funding jobFunds
         jobCommitment = new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            jobFunds, owner, address(forwarder), operator, executor, _defaultJobConfig(), _defaultFeeTiers()
         );
 
-        // 4. Authorize JobCommitment in funding jobFunds
         uint32 commitmentVersion = jobCommitment.commitmentVersion();
         vm.prank(owner);
         jobFunds.registerJobCommitment(address(jobCommitment), commitmentVersion);
@@ -184,16 +166,11 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         vm.prank(owner);
         jobFunds.setCurrentJobCommitment(address(jobCommitment));
 
-        // 5. Create default org for employer
         _createOrgForEmployer(employer, "test.com", DEFAULT_ORG_ID);
 
-        // 6. Fund org job balance
         _fundAndDepositWithAuthorization(
             jobFunds, address(usdc), employerPrivateKey, DEFAULT_ORG_ID, ORG_OPERATIONAL_BALANCE
         );
-
-        _fundApplicant(applicant1);
-        _fundApplicant(applicant2);
     }
 
     // ============ Organization Helpers ============
@@ -223,18 +200,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     }
 
     // ============ Funding Helpers ============
-
-    /// @notice Fund an applicant with 100 USDC and approve JobCommitment
-    function _fundApplicant(address account) internal {
-        _fundApplicantWithAmount(account, 100_000_000); // 100 USDC
-    }
-
-    /// @notice Fund an applicant with specific amount and approve JobCommitment
-    function _fundApplicantWithAmount(address account, uint256 amount) internal {
-        usdc.mint(account, amount);
-        vm.prank(account);
-        usdc.approve(address(jobCommitment), type(uint256).max);
-    }
 
     function _assertSlashBurned(
         uint256 burnAddressBefore,
@@ -325,57 +290,33 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         return keccak256(abi.encodePacked("app", applicantAddr, applicationNonce));
     }
 
-    /// @notice Apply with default stake; jobId is ignored because application signatures bind applicationId, not jobId.
-    function _applyToJob(uint256 _ignoredJobId, address applicantAddr) internal returns (bytes32 applicationId) {
-        _ignoredJobId;
-        return _applyToJobWithStake(applicantAddr, APPLICANT_STAKE);
+    function _submitApplication(address applicantAddr) internal returns (bytes32 applicationId) {
+        return _submitApplicationWithParams(applicantAddr, DEFAULT_RESPONSE_DEADLINE_DAYS);
     }
 
-    /// @notice Apply with default stake.
-    function _applyToJob(address applicantAddr) internal returns (bytes32 applicationId) {
-        return _applyToJobWithStake(applicantAddr, APPLICANT_STAKE);
-    }
-
-    /// @notice Apply with custom stake; jobId is ignored because application signatures bind applicationId, not jobId.
-    function _applyToJobWithStake(uint256 _ignoredJobId, address applicantAddr, uint256 stake)
-        internal
-        returns (bytes32 applicationId)
-    {
-        _ignoredJobId;
-        return _applyToJobWithStake(applicantAddr, stake);
-    }
-
-    /// @notice Apply with custom stake using the default response deadline.
-    function _applyToJobWithStake(address applicantAddr, uint256 stake) internal returns (bytes32 applicationId) {
-        return _applyToJobWithParams(applicantAddr, _toUint96(stake), DEFAULT_RESPONSE_DEADLINE_DAYS);
-    }
-
-    /// @notice Apply with full parameter control
-    function _applyToJobWithParams(address applicantAddr, uint96 stake, uint8 responseDeadlineDays)
+    /// @notice Submit an application with a custom response deadline.
+    function _submitApplicationWithParams(address applicantAddr, uint8 responseDeadlineDays)
         internal
         returns (bytes32 applicationId)
     {
         applicationId = _generateApplicationId(applicantAddr);
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signApplication(applicationId, applicantAddr, stake, responseDeadlineDays, expiry);
+        bytes memory signature = _signApplication(applicationId, applicantAddr, responseDeadlineDays, expiry);
 
         vm.prank(applicantAddr);
-        jobCommitment.submitApplication(applicationId, stake, responseDeadlineDays, expiry, signature);
+        jobCommitment.submitApplication(applicationId, responseDeadlineDays, expiry, signature);
     }
 
     // ============ Signature Helpers ============
 
     /// @notice Sign an application with the operator's private key
-    function _signApplication(
-        bytes32 applicationId,
-        address applicantAddr,
-        uint96 stake,
-        uint8 responseDeadlineDays,
-        uint256 expiry
-    ) internal view returns (bytes memory) {
-        bytes32 structHash = keccak256(
-            abi.encode(APPLICATION_TYPEHASH, applicationId, applicantAddr, stake, responseDeadlineDays, expiry)
-        );
+    function _signApplication(bytes32 applicationId, address applicantAddr, uint8 responseDeadlineDays, uint256 expiry)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 structHash =
+            keccak256(abi.encode(APPLICATION_TYPEHASH, applicationId, applicantAddr, responseDeadlineDays, expiry));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         return abi.encodePacked(r, s, v);
@@ -550,7 +491,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     /// @notice Record an application response after warping past deadline
     function _respondToApplicationLate(bytes32 applicationId) internal {
         ApplicationView memory app = jobCommitment.application(applicationId);
-        // Warp past the response deadline
         vm.warp(app.responseDeadline + 1);
         _respondToApplication(applicationId);
     }
@@ -587,7 +527,7 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         jobCommitment.unpublishJob(jobId, keyNonce, expiry, signature);
     }
 
-    /// @notice Close a job with no applications.
+    /// @notice Close a job with zero counters.
     function _closeJob(uint256 jobId) internal {
         _closeJob(jobId, 0, 0, 0);
     }
@@ -595,14 +535,15 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     /// @notice Close a job with operator-attested counters.
     function _closeJob(uint256 jobId, uint32 total, uint32 responded, uint32 onTime) internal {
         uint256 keyNonce = _nextJobCloseKeyNonce();
-        uint256 expiry = block.timestamp + 1 hours;
+        // Read the current time after helpers that may have warped the test clock.
+        uint256 expiry = vm.getBlockTimestamp() + 1 hours;
         bytes32 counterSnapshotRoot = _counterSnapshotRoot(total);
         bytes memory signature = _signJobClose(jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry);
         vm.prank(employer);
         jobCommitment.closeJob(jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature);
     }
 
-    /// @notice Settle an expired job with no applications (convenience)
+    /// @notice Settle an expired job with zero counters.
     function _settleExpiredJob(uint256 jobId) internal {
         _settleExpiredJob(jobId, 0, 0, 0);
     }
@@ -666,14 +607,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         if (totalApplications == 0) return bytes32(0);
 
         return keccak256(abi.encode("test-counter-snapshot-root", totalApplications));
-    }
-
-    // ============ Withdrawal Helpers ============
-
-    /// @notice Withdraw applicant stake through the single-application withdrawStake entrypoint.
-    function _withdrawStake(bytes32 applicationId, address applicantAddr) internal {
-        vm.prank(applicantAddr);
-        jobCommitment.withdrawStake(applicationId);
     }
 
     // ============ Time Helpers ============
@@ -778,22 +711,5 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         domainVerificationNonce++;
 
         return _packKeyNonce(NONCE_SCOPE_DOMAIN_VERIFICATION, domainVerificationNonce + salt);
-    }
-
-    // ============ Deployment Helpers ============
-
-    /// @notice Deploy a new JobCommitment instance with custom token
-    function _deployWithToken(IERC20 token) internal returns (JobCommitment) {
-        return new JobCommitment(
-            token,
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
-        );
     }
 }

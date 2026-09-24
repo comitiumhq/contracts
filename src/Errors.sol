@@ -147,12 +147,6 @@ library Errors {
     /// @notice Stake amount is below minimum
     error StakeTooLow(uint256 provided, uint256 minimum);
 
-    /// @notice Application stake does not match the current amount
-    error InvalidApplicantStake(uint96 provided, uint96 current);
-
-    /// @notice New applicant stake amount must differ from the current amount
-    error ApplicantStakeAmountUnchanged(uint96 amount);
-
     /// @notice Invalid fee tier
     error InvalidFeeTier(uint8 provided);
 
@@ -179,12 +173,6 @@ library Errors {
 
     /// @notice Application already responded to
     error ApplicationAlreadyResponded(bytes32 applicationId);
-
-    /// @notice Stake already withdrawn
-    error StakeAlreadyWithdrawn();
-
-    /// @notice Cannot withdraw applicant stake yet
-    error WithdrawalNotReady();
 
     /// @notice Job has not expired yet
     error JobNotExpired(uint256 referenceTime, uint256 expirationPeriod, uint256 currentTime);

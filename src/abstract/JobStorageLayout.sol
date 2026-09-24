@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {FeeTier, JobConfig} from "../types/ConfigTypes.sol";
 import {OperatorAuthorizer} from "./OperatorAuthorizer.sol";
 import {ExecutorRegistry} from "./ExecutorRegistry.sol";
 import {ContentURIRegistry} from "./ContentURIRegistry.sol";
-import {InvariantsLib} from "../libraries/InvariantsLib.sol";
 import {Job, Application} from "../types/JobTypes.sol";
 
 /// @title JobStorageLayout
@@ -20,14 +18,11 @@ abstract contract JobStorageLayout is OperatorAuthorizer, ExecutorRegistry, Cont
     /// @notice Mapping from job ID to job data.
     mapping(uint256 jobId => Job) internal _jobs;
 
-    /// @notice Mapping from applicationId to application data (privacy: no jobId link).
+    /// @dev The contract stores no application-to-job mapping.
     mapping(bytes32 applicationId => Application) internal _applications;
 
     /// @notice Mapping from applicationId to whether it has been used.
     mapping(bytes32 applicationId => bool) internal _usedApplicationIds;
-
-    /// @notice Global counter: sum of all active applicant stakes.
-    uint256 internal _totalApplicantStakes;
 
     /// @notice Versioned job configurations.
     mapping(uint32 configVersion => JobConfig) internal _jobConfigs;
@@ -37,9 +32,6 @@ abstract contract JobStorageLayout is OperatorAuthorizer, ExecutorRegistry, Cont
 
     /// @notice Current config version (incremented on each config update).
     uint32 internal _currentConfigVersion;
-
-    /// @notice Exact applicant stake amount for new submissions.
-    uint96 internal _applicantStakeAmount;
 
     // ============ Internal Helpers ============
 
@@ -96,16 +88,5 @@ abstract contract JobStorageLayout is OperatorAuthorizer, ExecutorRegistry, Cont
     /// @return key Content URI storage key.
     function _jobURIKey(uint256 jobId) internal pure returns (bytes32 key) {
         return keccak256(abi.encode("JOB", jobId));
-    }
-
-    // ============ Invariant Check ============
-
-    /// @notice Stake token for invariant check
-    function _stakeTokenForInvariant() internal view virtual returns (IERC20);
-
-    /// @dev Post-condition: token balance >= totalApplicantStakes.
-    ///      Uses assert because violation indicates a contract accounting bug, not user input.
-    function _checkApplicantStakeInvariant() internal view {
-        InvariantsLib.assertBalanceGte(_stakeTokenForInvariant(), address(this), _totalApplicantStakes);
     }
 }

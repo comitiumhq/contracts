@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {JobPublish} from "../../src/abstract/JobPublish.sol";
@@ -19,7 +18,6 @@ uint96 constant TEST_MIN_STAKE = 50_000_000;
 uint96 constant TEST_TIER_0_BASE_FEE = 25_000_000;
 uint96 constant TEST_TIER_1_BASE_FEE = 35_000_000;
 uint96 constant TEST_TIER_2_BASE_FEE = 50_000_000;
-uint96 constant TEST_APPLICANT_STAKE = 5_000_000;
 uint32 constant TEST_MAX_UNPUBLISHED_DURATION = 90 days;
 uint32 constant TEST_MAX_PUBLISHED_DURATION = 365 days;
 uint16 constant TEST_FEE_BPS_TIER_0 = 150;
@@ -116,11 +114,9 @@ contract MockJobFundsEchidna {
 // ============ Main Harness ============
 
 /// @title EchidnaJobLifecycle
-/// @notice Echidna assertion-mode tests for job lifecycle invariants
+/// @notice Lifecycle harness for Medusa property and assertion tests.
 /// @dev Inherits from real base contracts. Uses hevm.prank for msg.sender control
 ///      and external wrappers for calldata conversion.
-/// @dev Run: echidna . --contract EchidnaJobLifecycle --config test/echidna/echidna-lifecycle.yaml
-/// @dev Senders: 0x10000 (org member), 0x20000/0x30000 (applicants)
 contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
     using SafeCast for uint256;
 
@@ -129,7 +125,7 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
     // Operator (known private key for EIP-712 signing)
     uint256 constant OPERATOR_PK = 0xBEEF;
 
-    // Actor addresses (must match echidna-lifecycle.yaml sender config)
+    // Actor addresses must match the configured Medusa senders.
     address constant ORG_MEMBER = address(0x10000);
     address constant APPLICANT_A = address(0x20000);
     address constant APPLICANT_B = address(0x30000);
@@ -149,7 +145,7 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
     mapping(uint256 => uint8) public prevStatus;
     mapping(uint256 => bool) public prevOrgStakeSettled;
 
-    // Per-job application tracking (privacy: harness tracks job→app linkage)
+    // Model-only application-to-job links for settlement counters.
     mapping(uint256 => bytes32[]) public jobAppIds;
     mapping(uint256 => mapping(address => bool)) public hasApplied;
     mapping(uint256 => uint32) public jobTotalApps;
@@ -168,21 +164,14 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         _token = new MockERC20Echidna();
         _mockJobFunds = new MockJobFundsEchidna(address(_token));
 
-        // Derive operator address from private key
         _operatorAddr = hevm.addr(OPERATOR_PK);
         _executorAddr = address(0xE0001);
         _addExecutor(_executorAddr);
         _configureDefaults();
 
-        // Fund org (mint to jobFunds, set accounting)
         _token.mint(address(_mockJobFunds), INITIAL_BALANCE);
         _mockJobFunds.fundOrg(INITIAL_BALANCE);
 
-        // Fund applicants
-        _token.mint(APPLICANT_A, INITIAL_BALANCE);
-        _token.mint(APPLICANT_B, INITIAL_BALANCE);
-
-        // Start at reasonable timestamp
         hevm.warp(1_700_000_000);
     }
 
@@ -218,18 +207,9 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         _feeTiers[1][0] = FeeTier({baseFee: TEST_TIER_0_BASE_FEE, feeBps: TEST_FEE_BPS_TIER_0, deadlineDays: 3});
         _feeTiers[1][1] = FeeTier({baseFee: TEST_TIER_1_BASE_FEE, feeBps: TEST_FEE_BPS_TIER_1, deadlineDays: 7});
         _feeTiers[1][2] = FeeTier({baseFee: TEST_TIER_2_BASE_FEE, feeBps: TEST_FEE_BPS_TIER_2, deadlineDays: 14});
-        _applicantStakeAmount = TEST_APPLICANT_STAKE;
     }
 
     // ============ Virtual function overrides ============
-
-    function _stakeToken() internal view override(JobApplication) returns (IERC20) {
-        return IERC20(address(_token));
-    }
-
-    function _stakeTokenForInvariant() internal view override returns (IERC20) {
-        return IERC20(address(_token));
-    }
 
     function _jobFunds() internal view override(JobPublish, JobLifecycle) returns (IJobFunds) {
         return IJobFunds(address(_mockJobFunds));
@@ -258,12 +238,11 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
 
     function ext_submitApplication(
         bytes32 applicationId,
-        uint96 stake,
         uint8 responseDeadlineDays,
         uint256 expiry,
         bytes calldata sig
     ) external {
-        _submitApplication(applicationId, stake, responseDeadlineDays, expiry, sig, keccak256(msg.data));
+        _submitApplication(applicationId, responseDeadlineDays, expiry, sig, keccak256(msg.data));
     }
 
     function ext_recordApplicationResponse(bytes32 applicationId, bytes32 responseId) external {
@@ -298,16 +277,11 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
 
     // ============ Signature helpers ============
 
-    function _makeApplicationSig(
-        bytes32 applicationId,
-        address applicant,
-        uint96 stake,
-        uint8 responseDeadlineDays,
-        uint256 expiry
-    ) internal returns (bytes memory) {
-        bytes32 structHash = JobAuthorizationLib.hashApplication(
-            applicationId, applicant, stake, responseDeadlineDays, expiry
-        );
+    function _makeApplicationSig(bytes32 applicationId, address applicant, uint8 responseDeadlineDays, uint256 expiry)
+        internal
+        returns (bytes memory)
+    {
+        bytes32 structHash = JobAuthorizationLib.hashApplication(applicationId, applicant, responseDeadlineDays, expiry);
         bytes32 digest = _hashTypedDataV4(structHash);
         (uint8 v, bytes32 r, bytes32 s) = hevm.sign(OPERATOR_PK, digest);
         return abi.encodePacked(r, s, v);
@@ -427,7 +401,7 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         return bytes32(0);
     }
 
-    // ============ ACTION FUNCTIONS (called by Echidna) ============
+    // ============ Fuzz actions ============
 
     /// @notice Create a job (only ORG_MEMBER)
     function action_publishJob(uint256 stake, uint8 feeTier) public {
@@ -462,7 +436,6 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         allJobIds.push(jobId);
         prevStatus[jobId] = uint8(JobStatus.Published);
 
-        // Invariant 8: fee conservation
         Job storage job = _job(jobId);
         assert(uint256(job.stake) + uint256(job.feeAmount) == totalCost);
 
@@ -470,8 +443,8 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         _checkSolvencyInvariant();
     }
 
-    /// @notice Apply to a job (only applicants)
-    function action_applyToJob(uint256 jobIdx, uint256 stakeSeed) public {
+    /// @notice Submit an application associated with a modeled job.
+    function action_applyToJob(uint256 jobIdx) public {
         if (msg.sender == ORG_MEMBER) return;
         if (allJobIds.length == 0) return;
 
@@ -480,18 +453,14 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         if (job.status != JobStatus.Published) return;
         if (hasApplied[jobId][msg.sender]) return;
 
-        stakeSeed;
-        uint96 stake = TEST_APPLICANT_STAKE;
-        if (_token.balanceOf(msg.sender) < stake) return;
-
         applicationNonce++;
         bytes32 applicationId = keccak256(abi.encodePacked("app", msg.sender, applicationNonce));
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _makeApplicationSig(applicationId, msg.sender, stake, DEFAULT_DEADLINE_DAYS, expiry);
+        bytes memory sig = _makeApplicationSig(applicationId, msg.sender, DEFAULT_DEADLINE_DAYS, expiry);
 
         address applicant = msg.sender;
         hevm.prank(applicant);
-        this.ext_submitApplication(applicationId, stake, DEFAULT_DEADLINE_DAYS, expiry, sig);
+        this.ext_submitApplication(applicationId, DEFAULT_DEADLINE_DAYS, expiry, sig);
 
         jobAppIds[jobId].push(applicationId);
         hasApplied[jobId][applicant] = true;
@@ -538,7 +507,6 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
 
         Application storage app = _application(appId);
 
-        // Warp past response deadline
         if (block.timestamp <= app.responseDeadline) hevm.warp(uint256(app.responseDeadline) + 1);
 
         bytes32 responseId = keccak256(abi.encodePacked("late", appId));
@@ -597,7 +565,7 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         _checkSolvencyInvariant();
     }
 
-    /// @notice Settle expired job an expired job (warps time, no permission check in internal fn)
+    /// @notice Settle an expired job after advancing the test clock.
     function action_settleExpiredJob(uint256 jobIdx) public {
         if (allJobIds.length == 0) return;
 
@@ -628,46 +596,23 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         _checkSolvencyInvariant();
     }
 
-    /// @notice Return eligible applicant stake through any executor.
-    function action_withdrawStake(uint256 jobIdx, uint256 appIdx) public {
-        if (msg.sender == ORG_MEMBER) return;
-        if (allJobIds.length == 0) return;
-
-        uint256 jobId = _clampJobId(jobIdx);
-        bytes32[] storage appIds = jobAppIds[jobId];
-        if (appIds.length == 0) return;
-
-        bytes32 appId = appIds[appIdx % appIds.length];
-        Application storage app = _application(appId);
-        if (app.stakeWithdrawn) return;
-
-        bool canWithdraw = app.isResponded || block.timestamp > app.responseDeadline;
-        if (!canWithdraw) return;
-
-        _withdrawStake(appId);
-
-        // Invariant 9: withdrawal succeeded when conditions were met
-        assert(app.stakeWithdrawn);
-    }
-
     // ============ INVARIANT CHECKS ============
 
     function _checkJobInvariants(uint256 jobId) internal {
         Job storage job = _job(jobId);
         if (job.creator == address(0)) return;
 
-        // Invariant 5: status only moves forward toward Closed.
+        // Job status never moves backward.
         uint8 currentStatus = uint8(job.status);
         assert(currentStatus >= prevStatus[jobId]);
         prevStatus[jobId] = currentStatus;
 
-        // Invariant 6: orgStakeSettled never flips back to false
+        // Settlement is irreversible.
         if (prevOrgStakeSettled[jobId]) assert(job.orgStakeSettled);
         prevOrgStakeSettled[jobId] = job.orgStakeSettled;
     }
 
     function _checkSolvencyInvariant() internal view {
-        // Invariant 4: jobFunds holds enough tokens for available and locked org funds
         uint256 accounted = _mockJobFunds.availableBalance() + _mockJobFunds.stakedInJobs();
         assert(_token.balanceOf(address(_mockJobFunds)) >= accounted);
     }

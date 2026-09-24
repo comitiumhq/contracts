@@ -205,7 +205,6 @@ contract JobPublishTest is JobCommitmentTestBase {
             _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
-        // Warp past expiry
         vm.warp(expiry + 1);
 
         vm.expectRevert(Errors.SignatureExpired.selector);
@@ -230,7 +229,6 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
 
-        // Sign with a different private key (not an operator)
         uint256 wrongKey = 0x9999;
         bytes32 structHash = keccak256(
             abi.encode(
@@ -273,14 +271,12 @@ contract JobPublishTest is JobCommitmentTestBase {
     }
 
     function test_publishJob_nonceReplay_reverts() public {
-        // First creation succeeds
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
             _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest1", employer, keyNonce, expiry);
         _executeJobPublish(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest1", keyNonce, expiry, signature);
 
-        // Second creation with same keyNonce reverts.
         bytes memory signature2 =
             _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest2", employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
@@ -310,7 +306,6 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
 
-        // Sign for stake=EMPLOYER_STAKE but call with different stake
         bytes memory signature =
             _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE + 1, 0);

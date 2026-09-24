@@ -13,8 +13,7 @@ contract CrossContractIntegrationTest is JobCommitmentTestBase {
     // ============ Respond by Executor ============
 
     function test_recordApplicationResponseByExecutor() public {
-        uint256 jobId = _publishJob(0);
-        bytes32 appId = _applyToJob(jobId, applicant1);
+        bytes32 appId = _submitApplication(applicant1);
 
         _respondToApplicationAs(appId, executor);
         _assertApplicationResponded(appId);
@@ -48,22 +47,14 @@ contract CrossContractIntegrationTest is JobCommitmentTestBase {
         uint256 jobId1 = _publishJob(0);
         uint256 jobId2 = _publishJob(1);
 
-        bytes32 appId1 = _applyToJob(jobId1, applicant1);
-        bytes32 appId2 = _applyToJob(jobId2, applicant2);
-
-        _respondToApplication(appId1);
         _unpublishJob(jobId1);
-        _closeJob(jobId1, 1, 1, 1);
+        _closeJob(jobId1);
         _assertJobStatus(jobId2, JobStatus.Published);
 
-        _respondToApplication(appId2);
         _unpublishJob(jobId2);
-        _closeJob(jobId2, 1, 1, 1);
+        _closeJob(jobId2);
         _assertJobStatus(jobId1, JobStatus.Closed);
         _assertJobStatus(jobId2, JobStatus.Closed);
-
-        _withdrawStake(appId1, applicant1);
-        _withdrawStake(appId2, applicant2);
     }
 
     // ============ Authority Handovers ============
@@ -120,9 +111,8 @@ contract CrossContractIntegrationTest is JobCommitmentTestBase {
 
     function test_executorRotation_afterApplicationSubmission() public {
         address newExecutor = makeAddr("newExecutor");
-        uint256 jobId = _publishJob(0);
-        bytes32 appId1 = _applyToJob(jobId, applicant1);
-        bytes32 appId2 = _applyToJob(jobId, applicant2);
+        bytes32 appId1 = _submitApplication(applicant1);
+        bytes32 appId2 = _submitApplication(applicant2);
 
         vm.startPrank(owner);
         jobCommitment.addExecutor(newExecutor);

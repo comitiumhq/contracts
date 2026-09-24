@@ -15,10 +15,6 @@ contract ConfigValidationLibHarness {
     function validateFeeTiers(FeeTier[] memory tiers) external pure {
         ConfigValidationLib.validateFeeTiers(tiers);
     }
-
-    function validateApplicantStakeAmount(uint96 amount) external pure {
-        ConfigValidationLib.validateApplicantStakeAmount(amount);
-    }
 }
 
 contract ConfigValidationLibTest is Test {
@@ -56,10 +52,6 @@ contract ConfigValidationLibTest is Test {
 
     function test_validateJobConfig_acceptsDefault() public view {
         harness.validateJobConfig(_validConfig());
-    }
-
-    function test_validateApplicantStakeAmount_acceptsDefault() public view {
-        harness.validateApplicantStakeAmount(5_000_000);
     }
 
     function test_validateFeeTiers_acceptsSupportedCounts() public view {
@@ -147,21 +139,6 @@ contract ConfigValidationLibTest is Test {
 
         vm.expectPartialRevert(Errors.ConfigValueTooHigh.selector);
         harness.validateJobConfig(c);
-    }
-
-    function test_revert_applicantStakeTooLow() public {
-        vm.expectPartialRevert(Errors.ConfigValueTooLow.selector);
-        harness.validateApplicantStakeAmount(999_999);
-    }
-
-    function test_revert_applicantStakeTooHigh() public {
-        vm.expectPartialRevert(Errors.ConfigValueTooHigh.selector);
-        harness.validateApplicantStakeAmount(10_000_001);
-    }
-
-    function test_validateApplicantStakeAmount_acceptsBounds() public view {
-        harness.validateApplicantStakeAmount(1_000_000);
-        harness.validateApplicantStakeAmount(10_000_000);
     }
 
     function test_validateFeeTiers_acceptsBaseFeeUpperBound() public view {

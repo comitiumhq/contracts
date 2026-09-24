@@ -16,8 +16,6 @@ uint8 constant MIN_FEE_TIERS = 1;
 uint8 constant MAX_FEE_TIERS = 10;
 uint8 constant APPLICATION_DEADLINE_DAYS_UPPER = 30;
 uint16 constant MAX_BATCH_SIZE_UPPER = 50;
-uint96 constant APPLICANT_STAKE_LOWER = 1_000_000; // $1
-uint96 constant APPLICANT_STAKE_UPPER = 10_000_000; // $10
 uint32 constant MAX_UNPUBLISHED_DURATION_LOWER = 30 days;
 uint32 constant MAX_UNPUBLISHED_DURATION_UPPER = 365 days;
 uint32 constant MAX_PUBLISHED_DURATION_LOWER = 90 days;
@@ -94,13 +92,6 @@ library ConfigValidationLib {
             previousFeeBps = tier.feeBps;
             previousDeadlineDays = tier.deadlineDays;
         }
-    }
-
-    /// @notice Validate one exact applicant stake amount against immutable bounds.
-    /// @param amount Exact applicant stake amount to validate.
-    function validateApplicantStakeAmount(uint96 amount) internal pure {
-        if (amount < APPLICANT_STAKE_LOWER) revert Errors.ConfigValueTooLow("applicantStake");
-        if (amount > APPLICANT_STAKE_UPPER) revert Errors.ConfigValueTooHigh("applicantStake");
     }
 
     function _validateSlashingTable(SlashingTable memory t) private pure {

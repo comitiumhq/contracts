@@ -215,7 +215,6 @@ contract Deploy is BaseScript, Test {
         address[] memory initialExecutors = _singleAddressSet(executor);
         JobConfig memory jobConfig = _defaultJobConfig();
         FeeTier[] memory feeTiers = _defaultFeeTiers();
-        uint96 applicantStakeAmount = 3_000_000;
         uint256 startBlock = block.number;
         string memory gitCommit = vm.envOr("GIT_COMMIT", string(""));
 
@@ -254,17 +253,8 @@ contract Deploy is BaseScript, Test {
         console.log("  Address:", address(jobFunds));
 
         // ── 4. JobCommitment ────────────────────────────────────────────
-        JobCommitment jc = new JobCommitment(
-            IERC20(usdc),
-            jobFunds,
-            deployer,
-            address(forwarder),
-            operator,
-            executor,
-            jobConfig,
-            feeTiers,
-            applicantStakeAmount
-        );
+        JobCommitment jc =
+            new JobCommitment(jobFunds, deployer, address(forwarder), operator, executor, jobConfig, feeTiers);
 
         console.log("[JobCommitment]");
         console.log("  Address:", address(jc));
@@ -304,14 +294,12 @@ contract Deploy is BaseScript, Test {
 
         // JobCommitment
         assertEq(jc.owner(), deployer, "jc: wrong owner");
-        assertEq(address(jc.stakeToken()), usdc, "jc: wrong stakeToken");
         assertTrue(jc.isOperator(operator), "jc: operator not set");
         assertTrue(jc.isExecutor(executor), "jc: executor not set");
         assertFalse(jc.isExecutor(operator), "jc: operator is executor");
         assertFalse(jc.isOperator(executor), "jc: executor is operator");
         assertEq(address(jc.jobFunds()), address(jobFunds), "jc: wrong jobFunds");
         assertEq(jc.trustedForwarder(), address(forwarder), "jc: wrong forwarder");
-        assertEq(jc.applicantStakeAmount(), applicantStakeAmount, "jc: wrong applicant stake amount");
 
         // Ownership transfer
         assertEq(registry.pendingOwner(), ownerAddress, "registry: wrong pendingOwner");
@@ -352,9 +340,7 @@ contract Deploy is BaseScript, Test {
                     initialOperators: initialOperators,
                     initialExecutors: initialExecutors,
                     initialConfigHashes: DeploymentConfigHashes({
-                        jobConfig: keccak256(abi.encode(jobConfig)),
-                        feeTiers: keccak256(abi.encode(feeTiers)),
-                        applicantStakeAmount: keccak256(abi.encode(jc.applicantStakeAmount()))
+                        jobConfig: keccak256(abi.encode(jobConfig)), feeTiers: keccak256(abi.encode(feeTiers))
                     })
                 })
             })
