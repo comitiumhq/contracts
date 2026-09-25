@@ -6,33 +6,33 @@
       "network": "base_sepolia",
       "deployer": "0x94b391990C65A24c3FB2a86f9a3B6774990C1C1A",
       "stakeToken": "0x61479Fd8c77084d715D72A1E417fd48A92002819",
-      "startBlock": 46334458,
-      "deployedAtBlock": 46334458,
-      "deployedAtTimestamp": 1788437204,
-      "gitCommit": "3954598",
+      "startBlock": 47250922,
+      "deployedAtBlock": 47250922,
+      "deployedAtTimestamp": 1790270132,
+      "gitCommit": "bd61cd5",
       "script": "script/Deploy.s.sol",
       "contracts": {
-        "forwarder": "0xe6AbCB4b206096E2585F1189Ca8c39F5A77d99db",
+        "forwarder": "0xDB7CcE7dA42DC7e8cfE47117dAd304D4A5700ce3",
         "orgRegistry": {
-          "address": "0xEB3c11766f8269B0995F924Ee543e074A7c87E70",
-          "domainSeparator": "0x8bfaaa58707d34e2d987e585774ebb3e5e26643df2c73f3a3822d74e33754ac6",
+          "address": "0xB5A62dFee0D3C74F5bD4890278ecFa28F1746E02",
+          "domainSeparator": "0x5b584096215494beb0b1751cb0c75775038d86c73699ebbc0023c78c65c2183d",
           "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
           "initialOperators": [
             "0xc3c8F6dAD80E1aDe28F850f534cD7239589d486c"
           ]
         },
         "jobFunds": {
-          "address": "0x38A7493Cb8b41E161E7570acDCFCCA7deCBfaB8b",
+          "address": "0xa94b8009FBab9029183e7976c290663Eb4e53484",
           "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
           "initialFeeRecipient": "0x50DFC7e7893c7567fA638880e46e5525C9480193"
         },
         "jobCommitments": [
           {
             "commitmentVersion": 1,
-            "address": "0x873596614bc5307ed375e40CE1EF1Ac027b7eF45",
-            "startBlock": 46334458,
-            "domainSeparator": "0x0d4fa8e9ab98b7a7dc3c88cbe6785c15f1c090524aa13cef428293aaa970d988",
-            "runtimeCodeHash": "0x3990bf040ea04ae4650047eea59b46d6cc084628a45c85e2d4f30b3211a42650",
+            "address": "0xabc65438699910180B7DF686Cea8E8242fC2d174",
+            "startBlock": 47250922,
+            "domainSeparator": "0xcc9974bdbe2fe3628c012fd9aa9459fe50cacd71e2d96f1fe30991a05f66ebc9",
+            "runtimeCodeHash": "0xb904e47a1fa974701859dfa2407058617d93972c62030c2bc0c02d3ea95b39a8",
             "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
             "initialOperators": [
               "0xc3c8F6dAD80E1aDe28F850f534cD7239589d486c"
@@ -42,8 +42,7 @@
             ],
             "initialConfigHashes": {
               "jobConfig": "0x53440e4f5ffccf154dd40ca2fdaebc06469454f61c0bfaff62caca830f87f0e1",
-              "feeTiers": "0xe20f9a582cf02046acab7727777bc959d8ec822656f7adb896ff5c934c9bf03a",
-              "applicantStakeAmount": "0x26b6cc58385df0a50eef6bfe69ac639e575d6e79606106dead333340d3668b89"
+              "feeTiers": "0xe20f9a582cf02046acab7727777bc959d8ec822656f7adb896ff5c934c9bf03a"
             }
           }
         ]
