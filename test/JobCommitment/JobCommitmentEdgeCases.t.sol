@@ -115,12 +115,13 @@ contract JobCommitmentEdgeCasesTest is JobCommitmentTestBase {
         uint256 expiry = block.timestamp - pastTime;
 
         uint256 keyNonce = _nextJobPublishKeyNonce();
-        bytes memory sig = _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmExpired", employer, keyNonce, expiry);
+        bytes memory sig =
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmExpired"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(Errors.SignatureExpired.selector);
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmExpired", keyNonce, expiry, sig
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmExpired"), keyNonce, expiry, sig
         );
     }
 

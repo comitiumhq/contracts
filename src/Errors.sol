@@ -180,6 +180,9 @@ library Errors {
     /// @notice Application ID already used
     error ApplicationIdAlreadyUsed(bytes32 applicationId);
 
+    /// @notice Posting reference cannot be zero
+    error ZeroPostingRef();
+
     /// @notice Content URI cannot be empty
     error EmptyContentURI();
 

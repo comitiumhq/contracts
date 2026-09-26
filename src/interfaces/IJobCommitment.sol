@@ -10,6 +10,7 @@ import {JobExpiryStatus, JobStatus} from "../types/JobTypes.sol";
 /// @notice Job data returned by view functions
 struct JobView {
     uint256 orgId;
+    bytes32 postingRef;
     address creator;
     uint256 stake;
     uint256 feeAmount;
@@ -19,7 +20,6 @@ struct JobView {
     uint8 feeTier;
     JobStatus status;
     bool orgStakeSettled;
-    string contentURI;
 }
 
 /// @notice Application data returned by view functions
@@ -47,7 +47,7 @@ interface IJobCommitment {
         uint256 stake,
         uint256 fee,
         uint8 responseDeadlineDays,
-        string contentURI
+        bytes32 postingRef
     );
 
     // ---- Events: Application ----
@@ -79,11 +79,6 @@ interface IJobCommitment {
         uint256 slashRate,
         uint256 stakeReturned,
         uint256 stakeSlashed
-    );
-
-    /// @notice Emitted when published job metadata URI is updated.
-    event JobContentURIUpdated(
-        uint256 indexed jobId, uint256 indexed orgId, address indexed updater, string contentURI
     );
 
     // ---- Events: Expired Settlement ----
@@ -193,20 +188,6 @@ interface IJobCommitment {
         uint32 respondedApplications,
         uint32 onTimeResponses,
         bytes32 counterSnapshotRoot,
-        uint256 keyNonce,
-        uint256 expiry,
-        bytes calldata signature
-    ) external;
-
-    /// @notice Update published job metadata URI with an operator signature and org-side job-management authority.
-    /// @param jobId Job to update
-    /// @param contentURI New IPFS URI with job metadata
-    /// @param keyNonce Packed NoncesKeyed authorization key and nonce
-    /// @param expiry Timestamp after which the signature expires
-    /// @param signature Operator signature approving this metadata update
-    function updateJobContentURI(
-        uint256 jobId,
-        string calldata contentURI,
         uint256 keyNonce,
         uint256 expiry,
         bytes calldata signature

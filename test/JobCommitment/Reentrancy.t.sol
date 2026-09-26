@@ -71,7 +71,7 @@ contract ReentrantJobCommitmentCaller {
     uint256 private _jobStake;
     uint256 private _jobFee;
     uint8 private _feeTier;
-    string private _contentURI;
+    bytes32 private _postingRef;
     uint32 private _totalApplications;
     uint32 private _respondedApplications;
     uint32 private _onTimeResponses;
@@ -91,7 +91,7 @@ contract ReentrantJobCommitmentCaller {
         uint256 stake_,
         uint8 feeTier_,
         uint256 fee_,
-        string calldata contentURI_,
+        bytes32 postingRef_,
         uint256 keyNonce_,
         uint256 expiry_,
         bytes calldata signature_
@@ -100,7 +100,7 @@ contract ReentrantJobCommitmentCaller {
         _jobStake = stake_;
         _jobFee = fee_;
         _feeTier = feeTier_;
-        _contentURI = contentURI_;
+        _postingRef = postingRef_;
         _keyNonce = keyNonce_;
         _expiry = expiry_;
         _signature = signature_;
@@ -148,7 +148,7 @@ contract ReentrantJobCommitmentCaller {
             _jobStake,
             _jobFee,
             _feeRecipient,
-            abi.encode(_feeTier, _contentURI, _keyNonce, _expiry, signature)
+            abi.encode(_feeTier, _postingRef, _keyNonce, _expiry, signature)
         );
     }
 
@@ -220,13 +220,14 @@ contract ReentrancyTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmOuter", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmOuter"), employer, keyNonce, expiry);
 
         _maliciousToken()
             .setAttack(address(attacker), true, false, abi.encodeCall(ReentrantJobCommitmentCaller.publishJob, ()));
 
-        uint256 jobId =
-            _executeJobPublish(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmOuter", keyNonce, expiry, signature);
+        uint256 jobId = _executeJobPublish(
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmOuter"), keyNonce, expiry, signature
+        );
 
         assertEq(jobId, nextJobIdBefore);
         assertEq(jobCommitment.nextJobId(), nextJobIdBefore + 1);
@@ -290,15 +291,16 @@ contract ReentrancyTest is JobCommitmentTestBase {
     function _configureAttackerCreate(ReentrantJobCommitmentCaller attacker) private {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmNested", address(attacker), keyNonce, expiry);
+        bytes memory signature = _signJobPublish(
+            DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmNested"), address(attacker), keyNonce, expiry
+        );
 
         attacker.configureCreate(
             DEFAULT_ORG_ID,
             EMPLOYER_STAKE,
             0,
             _jobPublishFee(EMPLOYER_STAKE, 0),
-            "QmNested",
+            keccak256("QmNested"),
             keyNonce,
             expiry,
             signature

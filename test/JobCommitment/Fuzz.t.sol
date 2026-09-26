@@ -15,12 +15,13 @@ contract FuzzTest is JobCommitmentTestBase {
 
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(DEFAULT_ORG_ID, stake, 0, "QmFuzz", employer, keyNonce, expiry);
+        bytes memory signature =
+            _signJobPublish(DEFAULT_ORG_ID, stake, 0, keccak256("QmFuzz"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(stake, 0);
 
         vm.expectRevert(abi.encodeWithSelector(Errors.StakeTooLow.selector, stake, TEST_MIN_STAKE));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, stake, 0, expectedFee, "QmFuzz", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, stake, 0, expectedFee, keccak256("QmFuzz"), keyNonce, expiry, signature
         );
     }
 
@@ -32,10 +33,10 @@ contract FuzzTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, "QmFuzz", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, keccak256("QmFuzz"), employer, keyNonce, expiry);
         vm.expectRevert(abi.encodeWithSelector(Errors.InvalidFeeTier.selector, feeTier));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, 0, "QmFuzz", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, 0, keccak256("QmFuzz"), keyNonce, expiry, signature
         );
     }
 }

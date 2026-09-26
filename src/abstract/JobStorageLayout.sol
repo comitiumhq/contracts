@@ -4,12 +4,11 @@ pragma solidity 0.8.35;
 import {FeeTier, JobConfig} from "../types/ConfigTypes.sol";
 import {OperatorAuthorizer} from "./OperatorAuthorizer.sol";
 import {ExecutorRegistry} from "./ExecutorRegistry.sol";
-import {ContentURIRegistry} from "./ContentURIRegistry.sol";
 import {Job, Application} from "../types/JobTypes.sol";
 
 /// @title JobStorageLayout
 /// @notice Shared plain storage layout for JobCommitment modules.
-abstract contract JobStorageLayout is OperatorAuthorizer, ExecutorRegistry, ContentURIRegistry {
+abstract contract JobStorageLayout is OperatorAuthorizer, ExecutorRegistry {
     // ============ Storage ============
 
     /// @notice Counter for job IDs (starts at 1).
@@ -62,31 +61,10 @@ abstract contract JobStorageLayout is OperatorAuthorizer, ExecutorRegistry, Cont
         _usedApplicationIds[applicationId] = true;
     }
 
-    /// @notice Get job content URI
-    /// @param jobId Job ID
-    /// @return uri Content URI string
-    function _contentURI(uint256 jobId) internal view returns (string storage uri) {
-        return _contentURI(_jobURIKey(jobId));
-    }
-
-    /// @notice Set job content URI
-    /// @param jobId Job ID
-    /// @param uri Content URI string
-    function _setContentURI(uint256 jobId, string memory uri) internal {
-        _setContentURI(_jobURIKey(jobId), uri);
-    }
-
     /// @notice Caller identity for modules that support a user actor.
     /// @dev Default returns the raw caller for standalone use (e.g. fuzz harnesses that inherit these modules
     ///      directly); the concrete JobCommitment overrides it with the ERC-2771 actor.
     function _actor() internal view virtual returns (address) {
         return msg.sender;
-    }
-
-    /// @notice Build the content key for a job.
-    /// @param jobId Job ID.
-    /// @return key Content URI storage key.
-    function _jobURIKey(uint256 jobId) internal pure returns (bytes32 key) {
-        return keccak256(abi.encode("JOB", jobId));
     }
 }

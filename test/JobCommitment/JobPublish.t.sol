@@ -13,7 +13,7 @@ contract JobPublishTest is JobCommitmentTestBase {
     function test_publishJob_success() public {
         uint256 feeRecipientBalBefore = usdc.balanceOf(feeRecipient);
 
-        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest123");
+        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest123"));
 
         assertEq(jobId, 1);
 
@@ -23,7 +23,7 @@ contract JobPublishTest is JobCommitmentTestBase {
         assertEq(job.stake, EMPLOYER_STAKE);
         assertEq(job.feeTier, 0);
         assertEq(uint8(job.status), uint8(JobStatus.Published));
-        assertEq(job.contentURI, "QmTest123");
+        assertEq(job.postingRef, keccak256("QmTest123"));
 
         // Fee goes to the protocol fee recipient; stake stays accounted in JobFunds.
         uint256 expectedFee = TEST_TIER_0_BASE_FEE + ((EMPLOYER_STAKE * 150) / 10_000);
@@ -35,12 +35,20 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, TEST_MIN_STAKE - 1, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, TEST_MIN_STAKE - 1, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(TEST_MIN_STAKE - 1, 0);
 
         vm.expectRevert(abi.encodeWithSelector(Errors.StakeTooLow.selector, TEST_MIN_STAKE - 1, TEST_MIN_STAKE));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, TEST_MIN_STAKE - 1, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            employer,
+            DEFAULT_ORG_ID,
+            TEST_MIN_STAKE - 1,
+            0,
+            expectedFee,
+            keccak256("QmTest"),
+            keyNonce,
+            expiry,
+            signature
         );
     }
 
@@ -48,9 +56,11 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 3, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 3, keccak256("QmTest"), employer, keyNonce, expiry);
         vm.expectRevert(abi.encodeWithSelector(Errors.InvalidFeeTier.selector, 3));
-        _executeJobPublishWithFee(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 3, 0, "QmTest", keyNonce, expiry, signature);
+        _executeJobPublishWithFee(
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 3, 0, keccak256("QmTest"), keyNonce, expiry, signature
+        );
     }
 
     function test_publishJob_jobManager_succeeds() public {
@@ -68,12 +78,12 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", applicant1, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), applicant1, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(abi.encodeWithSelector(Errors.NotJobManager.selector, DEFAULT_ORG_ID, applicant1));
         _executeJobPublishWithFee(
-            applicant1, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            applicant1, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
     }
 
@@ -86,24 +96,25 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", applicant1, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), applicant1, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(abi.encodeWithSelector(Errors.NotJobManager.selector, DEFAULT_ORG_ID, applicant1));
         _executeJobPublishWithFee(
-            applicant1, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            applicant1, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
     }
 
-    function test_publishJob_emptyContentURI_reverts() public {
+    function test_publishJob_zeroPostingRef_reverts() public {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "", employer, keyNonce, expiry);
+        bytes memory signature =
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, bytes32(0), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
-        vm.expectRevert(Errors.EmptyContentURI.selector);
+        vm.expectRevert(Errors.ZeroPostingRef.selector);
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, bytes32(0), keyNonce, expiry, signature
         );
     }
 
@@ -112,13 +123,21 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmFeeMismatch", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmFeeMismatch"), employer, keyNonce, expiry);
         uint256 availableBefore = jobFunds.availableBalance(DEFAULT_ORG_ID);
         uint256 recipientBalanceBefore = usdc.balanceOf(feeRecipient);
 
         vm.expectRevert(abi.encodeWithSelector(Errors.FeeAmountMismatch.selector, expectedFee + 1, expectedFee));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee + 1, "QmFeeMismatch", keyNonce, expiry, signature
+            employer,
+            DEFAULT_ORG_ID,
+            EMPLOYER_STAKE,
+            0,
+            expectedFee + 1,
+            keccak256("QmFeeMismatch"),
+            keyNonce,
+            expiry,
+            signature
         );
 
         assertEq(jobFunds.availableBalance(DEFAULT_ORG_ID), availableBefore);
@@ -129,8 +148,9 @@ contract JobPublishTest is JobCommitmentTestBase {
     function test_publishJob_feeRecipientMismatch_revertsWithoutDebit() public {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmRecipientMismatch", employer, keyNonce, expiry);
+        bytes memory signature = _signJobPublish(
+            DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmRecipientMismatch"), employer, keyNonce, expiry
+        );
         uint256 availableBefore = jobFunds.availableBalance(DEFAULT_ORG_ID);
         address unexpectedRecipient = makeAddr("unexpectedRecipient");
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
@@ -143,7 +163,7 @@ contract JobPublishTest is JobCommitmentTestBase {
             EMPLOYER_STAKE,
             expectedFee,
             unexpectedRecipient,
-            abi.encode(uint8(0), "QmRecipientMismatch", keyNonce, expiry, signature)
+            abi.encode(uint8(0), keccak256("QmRecipientMismatch"), keyNonce, expiry, signature)
         );
 
         assertEq(jobFunds.availableBalance(DEFAULT_ORG_ID), availableBefore);
@@ -155,7 +175,7 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmDirect", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmDirect"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.prank(employer);
@@ -165,7 +185,7 @@ contract JobPublishTest is JobCommitmentTestBase {
             employer,
             EMPLOYER_STAKE,
             expectedFee,
-            abi.encode(uint8(0), "QmDirect", keyNonce, expiry, signature)
+            abi.encode(uint8(0), keccak256("QmDirect"), keyNonce, expiry, signature)
         );
     }
 
@@ -175,17 +195,17 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 tier1Fee = TEST_TIER_1_BASE_FEE + ((EMPLOYER_STAKE * 250) / 10_000);
         uint256 tier2Fee = TEST_TIER_2_BASE_FEE + ((EMPLOYER_STAKE * 350) / 10_000);
 
-        uint256 jobId0 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTier0");
+        uint256 jobId0 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTier0"));
         JobView memory job0 = jobCommitment.job(jobId0);
         assertEq(job0.feeTier, 0);
         assertEq(job0.feeAmount, tier0Fee);
 
-        uint256 jobId1 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 1, "QmTier1");
+        uint256 jobId1 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 1, keccak256("QmTier1"));
         JobView memory job1 = jobCommitment.job(jobId1);
         assertEq(job1.feeTier, 1);
         assertEq(job1.feeAmount, tier1Fee);
 
-        uint256 jobId2 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 2, "QmTier2");
+        uint256 jobId2 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 2, keccak256("QmTier2"));
         JobView memory job2 = jobCommitment.job(jobId2);
         assertEq(job2.feeTier, 2);
         assertEq(job2.feeAmount, tier2Fee);
@@ -202,14 +222,14 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.warp(expiry + 1);
 
         vm.expectRevert(Errors.SignatureExpired.selector);
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
     }
 
@@ -217,10 +237,11 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmBoundary", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmBoundary"), employer, keyNonce, expiry);
 
-        uint256 jobId =
-            _executeJobPublish(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmBoundary", keyNonce, expiry, signature);
+        uint256 jobId = _executeJobPublish(
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmBoundary"), keyNonce, expiry, signature
+        );
 
         assertEq(jobId, 1);
     }
@@ -236,7 +257,7 @@ contract JobPublishTest is JobCommitmentTestBase {
                 DEFAULT_ORG_ID,
                 EMPLOYER_STAKE,
                 uint8(0),
-                keccak256(bytes("QmTest")),
+                keccak256("QmTest"),
                 employer,
                 jobCommitment.currentConfigVersion(),
                 keyNonce,
@@ -250,7 +271,7 @@ contract JobPublishTest is JobCommitmentTestBase {
 
         vm.expectRevert(Errors.InvalidSignature.selector);
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, badSig
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, badSig
         );
     }
 
@@ -258,7 +279,7 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmStaleConfig", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmStaleConfig"), employer, keyNonce, expiry);
 
         vm.prank(owner);
         jobCommitment.setJobConfig(_defaultJobConfig(), _defaultFeeTiers());
@@ -266,7 +287,15 @@ contract JobPublishTest is JobCommitmentTestBase {
 
         vm.expectRevert(Errors.InvalidSignature.selector);
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmStaleConfig", keyNonce, expiry, signature
+            employer,
+            DEFAULT_ORG_ID,
+            EMPLOYER_STAKE,
+            0,
+            expectedFee,
+            keccak256("QmStaleConfig"),
+            keyNonce,
+            expiry,
+            signature
         );
     }
 
@@ -274,16 +303,18 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest1", employer, keyNonce, expiry);
-        _executeJobPublish(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest1", keyNonce, expiry, signature);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest1"), employer, keyNonce, expiry);
+        _executeJobPublish(
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest1"), keyNonce, expiry, signature
+        );
 
         bytes memory signature2 =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest2", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest2"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAccountNonce(address,uint256)", operator, keyNonce + 1));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest2", keyNonce, expiry, signature2
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest2"), keyNonce, expiry, signature2
         );
     }
 
@@ -291,14 +322,14 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 keyNonce = _packKeyNonce(NONCE_SCOPE_JOB_CLOSE, 1);
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(
             abi.encodeWithSelector(Errors.InvalidNonceScope.selector, NONCE_SCOPE_JOB_CLOSE, NONCE_SCOPE_JOB_PUBLISH)
         );
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
     }
 
@@ -307,12 +338,20 @@ contract JobPublishTest is JobCommitmentTestBase {
         uint256 expiry = block.timestamp + 1 hours;
 
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE + 1, 0);
 
         vm.expectRevert(Errors.InvalidSignature.selector);
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE + 1, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            employer,
+            DEFAULT_ORG_ID,
+            EMPLOYER_STAKE + 1,
+            0,
+            expectedFee,
+            keccak256("QmTest"),
+            keyNonce,
+            expiry,
+            signature
         );
     }
 
@@ -324,12 +363,12 @@ contract JobPublishTest is JobCommitmentTestBase {
         jobFunds.setJobManager(DEFAULT_ORG_ID, applicant1, true);
 
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(Errors.InvalidSignature.selector);
         _executeJobPublishWithFee(
-            applicant1, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            applicant1, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
     }
 }

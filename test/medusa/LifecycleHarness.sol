@@ -211,7 +211,7 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
 
     // ============ Virtual function overrides ============
 
-    function _jobFunds() internal view override(JobPublish, JobLifecycle) returns (IJobFunds) {
+    function _jobFunds() internal view override(JobLifecycle) returns (IJobFunds) {
         return IJobFunds(address(_mockJobFunds));
     }
 
@@ -222,12 +222,12 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         uint256 stake,
         uint8 feeTier,
         uint256 expectedFee,
-        string calldata contentURI,
+        bytes32 postingRef,
         uint256 nonce,
         uint256 expiry,
         bytes calldata sig
     ) external returns (uint256) {
-        uint256 jobId = _publishJob(orgId, stake, feeTier, expectedFee, contentURI, msg.sender, nonce, expiry, sig);
+        uint256 jobId = _publishJob(orgId, stake, feeTier, expectedFee, postingRef, msg.sender, nonce, expiry, sig);
         _mockJobFunds.recordPublishedJob(jobId, stake, expectedFee);
         return jobId;
     }
@@ -333,13 +333,13 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
-        string memory contentURI,
+        bytes32 postingRef,
         address creator,
         uint256 keyNonce,
         uint256 expiry
     ) internal returns (bytes memory) {
         bytes32 structHash = JobAuthorizationLib.hashJobPublish(
-            orgId, stake, feeTier, contentURI, creator, _currentConfigVersion, keyNonce, expiry
+            orgId, stake, feeTier, postingRef, creator, _currentConfigVersion, keyNonce, expiry
         );
         bytes32 digest = _hashTypedDataV4(structHash);
         (uint8 v, bytes32 r, bytes32 s) = hevm.sign(OPERATOR_PK, digest);
@@ -429,9 +429,10 @@ contract EchidnaJobLifecycle is JobPublish, JobApplication, JobLifecycle {
         // Use prank + external wrapper to convert memory→calldata
         uint256 keyNonce = _nextCreationKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _makeCreationSig(ORG_ID, stake, feeTier, "ipfs://test", ORG_MEMBER, keyNonce, expiry);
+        bytes32 postingRef = keccak256("medusa-posting");
+        bytes memory sig = _makeCreationSig(ORG_ID, stake, feeTier, postingRef, ORG_MEMBER, keyNonce, expiry);
         hevm.prank(ORG_MEMBER);
-        uint256 jobId = this.ext_publishJob(ORG_ID, stake, feeTier, fee, "ipfs://test", keyNonce, expiry, sig);
+        uint256 jobId = this.ext_publishJob(ORG_ID, stake, feeTier, fee, postingRef, keyNonce, expiry, sig);
 
         allJobIds.push(jobId);
         prevStatus[jobId] = uint8(JobStatus.Published);

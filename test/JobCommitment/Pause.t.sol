@@ -15,12 +15,12 @@ contract PauseTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
     }
 
@@ -102,18 +102,18 @@ contract PauseTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"), employer, keyNonce, expiry);
         uint256 expectedFee = _jobPublishFee(EMPLOYER_STAKE, 0);
 
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         _executeJobPublishWithFee(
-            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, "QmTest", keyNonce, expiry, signature
+            employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, expectedFee, keccak256("QmTest"), keyNonce, expiry, signature
         );
 
         vm.prank(owner);
         jobCommitment.unpause();
 
-        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest");
+        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest"));
         assertEq(jobId, 1);
     }
 

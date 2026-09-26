@@ -57,8 +57,8 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
 
     // ============ Internal Overrides ============
 
-    /// @dev Provides job funds for org authorization and lifecycle settlement.
-    function _jobFunds() internal view override(JobPublish, JobLifecycle) returns (IJobFunds) {
+    /// @dev Provides job funds for lifecycle settlement.
+    function _jobFunds() internal view override(JobLifecycle) returns (IJobFunds) {
         return jobFunds;
     }
 
@@ -84,12 +84,12 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
     ) external whenNotPaused nonReentrant returns (uint256 jobId) {
         if (msg.sender != address(jobFunds)) revert Errors.NotJobFunds(msg.sender);
 
-        (uint8 selectedFeeTier, string memory contentURI, uint256 keyNonce, uint256 expiry, bytes memory signature) =
-            abi.decode(publishData, (uint8, string, uint256, uint256, bytes));
+        (uint8 selectedFeeTier, bytes32 postingRef, uint256 keyNonce, uint256 expiry, bytes memory signature) =
+            abi.decode(publishData, (uint8, bytes32, uint256, uint256, bytes));
 
         return
             _publishJob(
-                orgId, stakeAmount, selectedFeeTier, feeAmount, contentURI, creator, keyNonce, expiry, signature
+                orgId, stakeAmount, selectedFeeTier, feeAmount, postingRef, creator, keyNonce, expiry, signature
             );
     }
 
@@ -147,17 +147,6 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
             expiry,
             signature
         );
-    }
-
-    /// @inheritdoc IJobCommitment
-    function updateJobContentURI(
-        uint256 jobId,
-        string calldata contentURI,
-        uint256 keyNonce,
-        uint256 expiry,
-        bytes calldata signature
-    ) external whenNotPaused nonReentrant {
-        _updateJobContentURI(jobId, contentURI, keyNonce, expiry, signature);
     }
 
     /// @inheritdoc IJobCommitment
@@ -234,6 +223,7 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
 
         return JobView({
             orgId: jobData.orgId,
+            postingRef: jobData.postingRef,
             creator: jobData.creator,
             stake: jobData.stake,
             feeAmount: jobData.feeAmount,
@@ -242,8 +232,7 @@ contract JobCommitment is OwnerControls, JobPublish, JobApplication, JobLifecycl
             closedAt: jobData.closedAt,
             feeTier: jobData.feeTier,
             status: jobData.status,
-            orgStakeSettled: jobData.orgStakeSettled,
-            contentURI: _contentURI(jobId)
+            orgStakeSettled: jobData.orgStakeSettled
         });
     }
 

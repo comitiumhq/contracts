@@ -19,17 +19,25 @@ contract LifecycleEventsTest is JobCommitmentTestBase {
     function test_jobPublished_emitsFullPayload() public {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory sig = _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest123", employer, keyNonce, expiry);
+        bytes memory sig =
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest123"), employer, keyNonce, expiry);
 
         uint256 expectedFee = TEST_TIER_0_BASE_FEE + (EMPLOYER_STAKE * TEST_FEE_TIER_0) / 10000;
 
         // jobId (topic1) is contract-assigned, so it is not checked; everything else is.
         vm.expectEmit(false, true, true, true, address(jobCommitment));
         emit IJobCommitment.JobPublished(
-            0, DEFAULT_ORG_ID, employer, 1, EMPLOYER_STAKE, expectedFee, TEST_DEADLINE_DAYS_TIER_0, "QmTest123"
+            0,
+            DEFAULT_ORG_ID,
+            employer,
+            1,
+            EMPLOYER_STAKE,
+            expectedFee,
+            TEST_DEADLINE_DAYS_TIER_0,
+            keccak256("QmTest123")
         );
 
-        _executeJobPublish(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmTest123", keyNonce, expiry, sig);
+        _executeJobPublish(employer, DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmTest123"), keyNonce, expiry, sig);
     }
 
     function test_jobUnpublished_emitsFullPayload() public {

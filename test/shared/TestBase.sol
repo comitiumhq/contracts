@@ -67,6 +67,7 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     uint256 public constant DEFAULT_ORG_ID = 1;
     uint256 public constant ORG_OPERATIONAL_BALANCE = 100_000_000_000; // 100,000 USDC
     uint8 public constant DEFAULT_RESPONSE_DEADLINE_DAYS = 3; // tier 0
+    bytes32 public constant DEFAULT_POSTING_REF = keccak256("comitium:test:posting");
     address public constant SLASH_BURN_ADDRESS = PROTOCOL_SLASH_BURN_ADDRESS;
 
     // ============ Nonces ============
@@ -77,14 +78,11 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     uint256 public domainVerificationNonce;
     uint256 public orgDomainUpdateNonce;
     uint256 public unpublishNonce;
-    uint256 public contentURINonce;
 
     uint16 internal constant NONCE_SCOPE_JOB_PUBLISH = JobAuthorizationLib.NONCE_SCOPE_JOB_PUBLISH;
     uint16 internal constant NONCE_SCOPE_JOB_CLOSE = JobAuthorizationLib.NONCE_SCOPE_JOB_CLOSE;
     uint16 internal constant NONCE_SCOPE_DOMAIN_VERIFICATION = OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION;
     uint16 internal constant NONCE_SCOPE_JOB_UNPUBLISH = JobAuthorizationLib.NONCE_SCOPE_JOB_UNPUBLISH;
-    uint16 internal constant NONCE_SCOPE_JOB_CONTENT_URI_UPDATE =
-        JobAuthorizationLib.NONCE_SCOPE_JOB_CONTENT_URI_UPDATE;
     uint16 internal constant NONCE_SCOPE_ORG_DOMAIN_UPDATE = OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE;
     uint16 internal constant NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT =
         JobAuthorizationLib.NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT;
@@ -95,7 +93,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     bytes32 public constant JOB_EXPIRED_SETTLEMENT_TYPEHASH = JobAuthorizationLib.JOB_EXPIRED_SETTLEMENT_TYPEHASH;
     bytes32 public constant JOB_PUBLISH_TYPEHASH = JobAuthorizationLib.JOB_PUBLISH_TYPEHASH;
     bytes32 public constant JOB_UNPUBLISH_TYPEHASH = JobAuthorizationLib.JOB_UNPUBLISH_TYPEHASH;
-    bytes32 public constant JOB_CONTENT_URI_UPDATE_TYPEHASH = JobAuthorizationLib.JOB_CONTENT_URI_UPDATE_TYPEHASH;
     bytes32 public constant DOMAIN_VERIFICATION_TYPEHASH = OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH;
     bytes32 public constant ORG_DOMAIN_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_DOMAIN_UPDATE_TYPEHASH;
 
@@ -215,18 +212,18 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
 
     /// @notice Create a job with default stake and specified fee tier
     function _publishJob(uint8 feeTier) internal returns (uint256 jobId) {
-        return _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, "QmTest123");
+        return _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, DEFAULT_POSTING_REF);
     }
 
     /// @notice Create a job with all parameters
-    function _publishJobWithParams(uint256 orgId, uint256 stake, uint8 feeTier, string memory contentURI)
+    function _publishJobWithParams(uint256 orgId, uint256 stake, uint8 feeTier, bytes32 postingRef)
         internal
         returns (uint256 jobId)
     {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(orgId, stake, feeTier, contentURI, employer, keyNonce, expiry);
-        return _executeJobPublish(employer, orgId, stake, feeTier, contentURI, keyNonce, expiry, signature);
+        bytes memory signature = _signJobPublish(orgId, stake, feeTier, postingRef, employer, keyNonce, expiry);
+        return _executeJobPublish(employer, orgId, stake, feeTier, postingRef, keyNonce, expiry, signature);
     }
 
     /// @notice Create a job with custom employer
@@ -236,8 +233,9 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(orgId, stake, feeTier, "QmTest123", employerAddr, keyNonce, expiry);
-        return _executeJobPublish(employerAddr, orgId, stake, feeTier, "QmTest123", keyNonce, expiry, signature);
+        bytes memory signature =
+            _signJobPublish(orgId, stake, feeTier, DEFAULT_POSTING_REF, employerAddr, keyNonce, expiry);
+        return _executeJobPublish(employerAddr, orgId, stake, feeTier, DEFAULT_POSTING_REF, keyNonce, expiry, signature);
     }
 
     function _executeJobPublish(
@@ -245,13 +243,13 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
-        string memory contentURI,
+        bytes32 postingRef,
         uint256 keyNonce,
         uint256 expiry,
         bytes memory signature
     ) internal returns (uint256 jobId) {
         return _executeJobPublishWithFee(
-            creator, orgId, stake, feeTier, _jobPublishFee(stake, feeTier), contentURI, keyNonce, expiry, signature
+            creator, orgId, stake, feeTier, _jobPublishFee(stake, feeTier), postingRef, keyNonce, expiry, signature
         );
     }
 
@@ -261,7 +259,7 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         uint256 stake,
         uint8 feeTier,
         uint256 expectedFeeAmount,
-        string memory contentURI,
+        bytes32 postingRef,
         uint256 keyNonce,
         uint256 expiry,
         bytes memory signature
@@ -273,7 +271,7 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
             stake,
             expectedFeeAmount,
             feeRecipient,
-            abi.encode(feeTier, contentURI, keyNonce, expiry, signature)
+            abi.encode(feeTier, postingRef, keyNonce, expiry, signature)
         );
     }
 
@@ -406,7 +404,7 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
-        string memory contentURI,
+        bytes32 postingRef,
         address creator,
         uint256 keyNonce,
         uint256 expiry
@@ -417,7 +415,7 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
                 orgId,
                 stake,
                 feeTier,
-                keccak256(bytes(contentURI)),
+                postingRef,
                 creator,
                 jobCommitment.currentConfigVersion(),
                 keyNonce,
@@ -436,21 +434,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         returns (bytes memory)
     {
         bytes32 structHash = keccak256(abi.encode(JOB_UNPUBLISH_TYPEHASH, jobId, unpublisher, keyNonce, expiry));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
-        return abi.encodePacked(r, s, v);
-    }
-
-    function _signJobContentURIUpdate(
-        uint256 jobId,
-        string memory contentURI,
-        address updater,
-        uint256 keyNonce,
-        uint256 expiry
-    ) internal view returns (bytes memory) {
-        bytes32 structHash = keccak256(
-            abi.encode(JOB_CONTENT_URI_UPDATE_TYPEHASH, jobId, keccak256(bytes(contentURI)), updater, keyNonce, expiry)
-        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         return abi.encodePacked(r, s, v);
@@ -697,13 +680,6 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         unpublishNonce++;
 
         return _packKeyNonce(NONCE_SCOPE_JOB_UNPUBLISH, unpublishNonce);
-    }
-
-    /// @notice Allocate the next job content URI update keyNonce.
-    function _nextJobContentURIUpdateKeyNonce() internal returns (uint256) {
-        contentURINonce++;
-
-        return _packKeyNonce(NONCE_SCOPE_JOB_CONTENT_URI_UPDATE, contentURINonce);
     }
 
     /// @notice Allocate a domain-verification keyNonce with deterministic test entropy.

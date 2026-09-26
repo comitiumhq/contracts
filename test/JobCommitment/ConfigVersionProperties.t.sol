@@ -50,7 +50,7 @@ contract ConfigVersionPropertiesTest is JobCommitmentTestBase {
         jobCommitment.setJobConfig(config, tiers);
 
         _fundOrg(DEFAULT_ORG_ID, employerPrivateKey, 2_000_000_000);
-        uint256 job2 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "QmNew");
+        uint256 job2 = _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, keccak256("QmNew"));
         JobView memory j2 = jobCommitment.job(job2);
 
         assertLt(j1.feeAmount, j2.feeAmount, "Old job should have lower fee than new job");

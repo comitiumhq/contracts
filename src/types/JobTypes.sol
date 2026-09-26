@@ -19,6 +19,9 @@ enum JobExpiryStatus {
 
 /// @notice Job data stored by a concrete JobCommitment deployment.
 struct Job {
+    /// @notice Stable reference to the product job posting.
+    bytes32 postingRef;
+
     /// @notice Account that initiated job creation.
     address creator;
 

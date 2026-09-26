@@ -19,7 +19,6 @@ contract AuthorizationLibTest is Test {
     bytes32 internal constant JOB_CLOSE_TYPEHASH = JobAuthorizationLib.JOB_CLOSE_TYPEHASH;
     bytes32 internal constant JOB_EXPIRED_SETTLEMENT_TYPEHASH = JobAuthorizationLib.JOB_EXPIRED_SETTLEMENT_TYPEHASH;
     bytes32 internal constant JOB_UNPUBLISH_TYPEHASH = JobAuthorizationLib.JOB_UNPUBLISH_TYPEHASH;
-    bytes32 internal constant JOB_CONTENT_URI_UPDATE_TYPEHASH = JobAuthorizationLib.JOB_CONTENT_URI_UPDATE_TYPEHASH;
     bytes32 internal constant DOMAIN_VERIFICATION_TYPEHASH = OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH;
     bytes32 internal constant ORG_DOMAIN_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_DOMAIN_UPDATE_TYPEHASH;
 
@@ -29,7 +28,7 @@ contract AuthorizationLibTest is Test {
     function test_typehashes_matchFrozenEip712Spec() public pure {
         assertEq(
             JobAuthorizationLib.JOB_PUBLISH_TYPEHASH,
-            0x40115f000192d1ee5d4239c74b587c4a7bed71026182bddff0cb3f56c7443cff,
+            0xef0e224912ea70bee1428bdfe4a9168c3560d360be2fa73eeb9c4ebb05f82250,
             "JobPublish typehash drifted"
         );
         assertEq(
@@ -53,11 +52,6 @@ contract AuthorizationLibTest is Test {
             "JobUnpublish typehash drifted"
         );
         assertEq(
-            JobAuthorizationLib.JOB_CONTENT_URI_UPDATE_TYPEHASH,
-            0x033c69ef789142bfcf999327410f43bff26016a40219bfe0fbf9690b48e7993d,
-            "JobContentURIUpdate typehash drifted"
-        );
-        assertEq(
             OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH,
             0x61b8ad5f716b24d7c5cbffcc48d9dbdda35348a2f99d2ef71e8b40d72ea125b7,
             "DomainVerification typehash drifted"
@@ -75,20 +69,19 @@ contract AuthorizationLibTest is Test {
         assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_CLOSE, 2, "JobClose nonce scope drifted");
         assertEq(OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION, 3, "DomainVerification nonce scope drifted");
         assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_UNPUBLISH, 4, "JobUnpublish nonce scope drifted");
-        assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_CONTENT_URI_UPDATE, 5, "JobContentURIUpdate nonce scope drifted");
         assertEq(OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE, 6, "OrgDomainUpdate nonce scope drifted");
         assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT, 7, "JobExpiredSettlement nonce scope drifted");
     }
 
     function test_hashJobPublish_matchesManualVector() public pure {
-        string memory contentURI = "ipfs://job";
+        bytes32 postingRef = keccak256("posting");
         bytes32 expected = keccak256(
             abi.encode(
                 JOB_PUBLISH_TYPEHASH,
                 uint256(42),
                 uint256(300_000_000),
                 uint8(1),
-                keccak256(bytes(contentURI)),
+                postingRef,
                 address(0xBEEF),
                 uint32(2),
                 uint256(123),
@@ -97,7 +90,7 @@ contract AuthorizationLibTest is Test {
         );
 
         assertEq(
-            JobAuthorizationLib.hashJobPublish(42, 300_000_000, 1, contentURI, address(0xBEEF), 2, 123, 456), expected
+            JobAuthorizationLib.hashJobPublish(42, 300_000_000, 1, postingRef, address(0xBEEF), 2, 123, 456), expected
         );
     }
 
@@ -155,22 +148,6 @@ contract AuthorizationLibTest is Test {
         assertEq(JobAuthorizationLib.hashJobUnpublish(7, address(0xBEEF), 123, 456), expected);
     }
 
-    function test_hashJobContentURIUpdate_matchesManualVector() public pure {
-        string memory contentURI = "ipfs://job-v2";
-        bytes32 expected = keccak256(
-            abi.encode(
-                JOB_CONTENT_URI_UPDATE_TYPEHASH,
-                uint256(7),
-                keccak256(bytes(contentURI)),
-                address(0xBEEF),
-                uint256(123),
-                uint256(456)
-            )
-        );
-
-        assertEq(JobAuthorizationLib.hashJobContentURIUpdate(7, contentURI, address(0xBEEF), 123, 456), expected);
-    }
-
     function test_hashDomainVerification_matchesManualVector() public pure {
         bytes32 domainHash = keccak256("example.com");
         bytes32 expected = keccak256(
@@ -203,7 +180,7 @@ contract AuthorizationLibTest is Test {
 
     function test_hashJobPublish_recoversSigner() public view {
         bytes32 structHash =
-            JobAuthorizationLib.hashJobPublish(42, 300_000_000, 1, "ipfs://job", address(0xBEEF), 2, 123, 456);
+            JobAuthorizationLib.hashJobPublish(42, 300_000_000, 1, keccak256("posting"), address(0xBEEF), 2, 123, 456);
 
         _assertRoundTrip(structHash);
     }
@@ -230,12 +207,6 @@ contract AuthorizationLibTest is Test {
 
     function test_hashJobUnpublish_recoversSigner() public view {
         bytes32 structHash = JobAuthorizationLib.hashJobUnpublish(7, address(0xBEEF), 123, 456);
-
-        _assertRoundTrip(structHash);
-    }
-
-    function test_hashJobContentURIUpdate_recoversSigner() public view {
-        bytes32 structHash = JobAuthorizationLib.hashJobContentURIUpdate(7, "ipfs://job-v2", address(0xBEEF), 123, 456);
 
         _assertRoundTrip(structHash);
     }

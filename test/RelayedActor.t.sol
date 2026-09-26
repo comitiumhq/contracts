@@ -57,7 +57,7 @@ contract RelayedActorTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "ipfs://job-v1", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, DEFAULT_POSTING_REF, employer, keyNonce, expiry);
 
         bytes memory result = _forwardAs(
             employer,
@@ -70,7 +70,7 @@ contract RelayedActorTest is JobCommitmentTestBase {
                     EMPLOYER_STAKE,
                     _jobPublishFee(EMPLOYER_STAKE, 0),
                     feeRecipient,
-                    abi.encode(uint8(0), "ipfs://job-v1", keyNonce, expiry, signature)
+                    abi.encode(uint8(0), DEFAULT_POSTING_REF, keyNonce, expiry, signature)
                 )
             )
         );
@@ -79,7 +79,7 @@ contract RelayedActorTest is JobCommitmentTestBase {
         JobView memory job = jobCommitment.job(jobId);
 
         assertEq(job.creator, employer);
-        assertEq(job.contentURI, "ipfs://job-v1");
+        assertEq(job.postingRef, DEFAULT_POSTING_REF);
     }
 
     function test_forwardedUnpublishAndCloseUseOriginalActor() public {
@@ -117,91 +117,6 @@ contract RelayedActorTest is JobCommitmentTestBase {
         );
 
         assertEq(uint8(jobCommitment.job(terminalJobId).status), uint8(JobStatus.Closed));
-    }
-
-    function test_ozForwarderExecuteRelaysJobContentURIUpdate() public {
-        uint256 relayedManagerPrivateKey = 0xA11CE;
-        address relayedManager = vm.addr(relayedManagerPrivateKey);
-
-        vm.prank(employer);
-        jobFunds.setJobManager(DEFAULT_ORG_ID, relayedManager, true);
-
-        uint256 jobId = _publishJob(0);
-        uint256 keyNonce = _nextJobContentURIUpdateKeyNonce();
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory operatorSignature =
-            _signJobContentURIUpdate(jobId, "ipfs://job-forwarder", relayedManager, keyNonce, expiry);
-        bytes memory callData = abi.encodeCall(
-            jobCommitment.updateJobContentURI, (jobId, "ipfs://job-forwarder", keyNonce, expiry, operatorSignature)
-        );
-
-        ERC2771Forwarder.ForwardRequestData memory request =
-            _forwardRequest(relayedManagerPrivateKey, address(jobCommitment), callData);
-
-        assertTrue(forwarder.verify(request));
-
-        vm.prank(operator);
-        forwarder.execute(request);
-
-        assertEq(jobCommitment.job(jobId).contentURI, "ipfs://job-forwarder");
-        assertEq(forwarder.nonces(relayedManager), 1);
-    }
-
-    function test_updateJobContentURI_success() public {
-        uint256 jobId = _publishJob(0);
-        uint256 keyNonce = _nextJobContentURIUpdateKeyNonce();
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobContentURIUpdate(jobId, "ipfs://job-v2", employer, keyNonce, expiry);
-
-        _forwardAs(
-            employer,
-            address(jobCommitment),
-            abi.encodeCall(jobCommitment.updateJobContentURI, (jobId, "ipfs://job-v2", keyNonce, expiry, signature))
-        );
-
-        assertEq(jobCommitment.job(jobId).contentURI, "ipfs://job-v2");
-    }
-
-    function test_updateJobContentURI_revertsForUnpublishedJob() public {
-        uint256 jobId = _publishJob(0);
-
-        _unpublishJob(jobId);
-
-        uint256 keyNonce = _nextJobContentURIUpdateKeyNonce();
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobContentURIUpdate(jobId, "ipfs://job-v2", employer, keyNonce, expiry);
-
-        vm.prank(employer);
-        vm.expectRevert(
-            abi.encodeWithSelector(Errors.InvalidJobStatus.selector, JobStatus.Unpublished, JobStatus.Published)
-        );
-        jobCommitment.updateJobContentURI(jobId, "ipfs://job-v2", keyNonce, expiry, signature);
-    }
-
-    function test_updateJobContentURI_revertsForNonManager() public {
-        uint256 jobId = _publishJob(0);
-        uint256 keyNonce = _nextJobContentURIUpdateKeyNonce();
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobContentURIUpdate(jobId, "ipfs://job-v2", applicant1, keyNonce, expiry);
-
-        vm.prank(applicant1);
-        vm.expectRevert(abi.encodeWithSelector(Errors.NotJobManager.selector, DEFAULT_ORG_ID, applicant1));
-        jobCommitment.updateJobContentURI(jobId, "ipfs://job-v2", keyNonce, expiry, signature);
-    }
-
-    function test_updateJobContentURI_revertsForWrongNonceScope() public {
-        uint256 jobId = _publishJob(0);
-        uint256 keyNonce = _packKeyNonce(NONCE_SCOPE_JOB_UNPUBLISH, 1);
-        uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobContentURIUpdate(jobId, "ipfs://job-v2", employer, keyNonce, expiry);
-
-        vm.prank(employer);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Errors.InvalidNonceScope.selector, NONCE_SCOPE_JOB_UNPUBLISH, NONCE_SCOPE_JOB_CONTENT_URI_UPDATE
-            )
-        );
-        jobCommitment.updateJobContentURI(jobId, "ipfs://job-v2", keyNonce, expiry, signature);
     }
 
     function test_forwardedCustodyFlowsUseOriginalActorButExecutorPathStaysRaw() public {
@@ -261,7 +176,7 @@ contract RelayedActorTest is JobCommitmentTestBase {
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, "ipfs://job-v1", employer, keyNonce, expiry);
+            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, DEFAULT_POSTING_REF, employer, keyNonce, expiry);
         bytes memory callData = abi.encodeCall(
             jobFunds.publishJob,
             (
@@ -270,7 +185,7 @@ contract RelayedActorTest is JobCommitmentTestBase {
                 EMPLOYER_STAKE,
                 _jobPublishFee(EMPLOYER_STAKE, 0),
                 feeRecipient,
-                abi.encode(uint8(0), "ipfs://job-v1", keyNonce, expiry, signature)
+                abi.encode(uint8(0), DEFAULT_POSTING_REF, keyNonce, expiry, signature)
             )
         );
 

@@ -19,7 +19,7 @@ contract PropertyFuzzTest is JobCommitmentTestBase {
         uint256 feeRecipientBefore = usdc.balanceOf(feeRecipient);
         uint256 orgOpBalBefore = _getOrgOperationalBalance(DEFAULT_ORG_ID);
 
-        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, stake, feeTier, "QmAcc");
+        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, stake, feeTier, keccak256("QmAcc"));
 
         JobView memory job = jobCommitment.job(jobId);
         uint256 fee = job.feeAmount;
@@ -47,7 +47,7 @@ contract PropertyFuzzTest is JobCommitmentTestBase {
 
         uint256 orgBalanceBefore = _getOrgOperationalBalance(DEFAULT_ORG_ID);
         uint256 burnBalanceBefore = usdc.balanceOf(SLASH_BURN_ADDRESS);
-        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, stake, 0, "QmForce");
+        uint256 jobId = _publishJobWithParams(DEFAULT_ORG_ID, stake, 0, keccak256("QmForce"));
         uint256 fee = jobCommitment.job(jobId).feeAmount;
 
         _unpublishJob(jobId);

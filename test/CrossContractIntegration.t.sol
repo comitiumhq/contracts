@@ -33,12 +33,15 @@ contract CrossContractIntegrationTest is JobCommitmentTestBase {
 
         uint256 keyNonce = _nextJobPublishKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(orgId2, TEST_MIN_STAKE, 0, "QmTest", employer2, keyNonce, expiry);
+        bytes memory signature =
+            _signJobPublish(orgId2, TEST_MIN_STAKE, 0, keccak256("QmTest"), employer2, keyNonce, expiry);
         uint256 fee = TEST_TIER_0_BASE_FEE + ((TEST_MIN_STAKE * 150) / 10_000);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.InsufficientBalance.selector, TEST_MIN_STAKE + fee, depositAmount)
         );
-        _executeJobPublishWithFee(employer2, orgId2, TEST_MIN_STAKE, 0, fee, "QmTest", keyNonce, expiry, signature);
+        _executeJobPublishWithFee(
+            employer2, orgId2, TEST_MIN_STAKE, 0, fee, keccak256("QmTest"), keyNonce, expiry, signature
+        );
     }
 
     // ============ Multiple Jobs Same Org ============

@@ -7,11 +7,10 @@ library JobAuthorizationLib {
     uint16 internal constant NONCE_SCOPE_JOB_PUBLISH = 1;
     uint16 internal constant NONCE_SCOPE_JOB_CLOSE = 2;
     uint16 internal constant NONCE_SCOPE_JOB_UNPUBLISH = 4;
-    uint16 internal constant NONCE_SCOPE_JOB_CONTENT_URI_UPDATE = 5;
     uint16 internal constant NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT = 7;
 
     bytes32 internal constant JOB_PUBLISH_TYPEHASH = keccak256(
-        "JobPublish(uint256 orgId,uint256 stake,uint8 feeTier,string contentURI,address creator,uint32 configVersion,uint256 keyNonce,uint256 expiry)"
+        "JobPublish(uint256 orgId,uint256 stake,uint8 feeTier,bytes32 postingRef,address creator,uint32 configVersion,uint256 keyNonce,uint256 expiry)"
     );
 
     bytes32 internal constant APPLICATION_TYPEHASH =
@@ -28,15 +27,11 @@ library JobAuthorizationLib {
     bytes32 internal constant JOB_UNPUBLISH_TYPEHASH =
         keccak256("JobUnpublish(uint256 jobId,address unpublisher,uint256 keyNonce,uint256 expiry)");
 
-    bytes32 internal constant JOB_CONTENT_URI_UPDATE_TYPEHASH = keccak256(
-        "JobContentURIUpdate(uint256 jobId,string contentURI,address updater,uint256 keyNonce,uint256 expiry)"
-    );
-
     function hashJobPublish(
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
-        string memory contentURI,
+        bytes32 postingRef,
         address creator,
         uint32 configVersion,
         uint256 keyNonce,
@@ -44,15 +39,7 @@ library JobAuthorizationLib {
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                JOB_PUBLISH_TYPEHASH,
-                orgId,
-                stake,
-                feeTier,
-                keccak256(bytes(contentURI)),
-                creator,
-                configVersion,
-                keyNonce,
-                expiry
+                JOB_PUBLISH_TYPEHASH, orgId, stake, feeTier, postingRef, creator, configVersion, keyNonce, expiry
             )
         );
     }
@@ -119,17 +106,5 @@ library JobAuthorizationLib {
         returns (bytes32)
     {
         return keccak256(abi.encode(JOB_UNPUBLISH_TYPEHASH, jobId, unpublisher, keyNonce, expiry));
-    }
-
-    function hashJobContentURIUpdate(
-        uint256 jobId,
-        string memory contentURI,
-        address updater,
-        uint256 keyNonce,
-        uint256 expiry
-    ) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(JOB_CONTENT_URI_UPDATE_TYPEHASH, jobId, keccak256(bytes(contentURI)), updater, keyNonce, expiry)
-        );
     }
 }
