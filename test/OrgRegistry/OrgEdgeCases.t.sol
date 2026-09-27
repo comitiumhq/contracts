@@ -29,7 +29,7 @@ contract OrgReentrancyTest is OrgTestBase {
         reentrantToken = new ReentrantOrgToken();
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
-        reentrantRegistry = new OrgRegistry(contractOwner, address(forwarder), operator);
+        reentrantRegistry = new OrgRegistry(contractOwner, address(forwarder), operator, executor);
         reentrantCommitmentFunds = new CommitmentFunds(
             IERC20(address(reentrantToken)),
             IOrgRegistry(address(reentrantRegistry)),
@@ -52,8 +52,8 @@ contract OrgReentrancyTest is OrgTestBase {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         reentrantToken.mint(orgOwner1, 10_000_000_000);
-        vm.prank(orgOwner1);
-        uint256 orgId = reentrantRegistry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        vm.prank(executor);
+        uint256 orgId = reentrantRegistry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
 
         uint256 depositAmount = 5_000_000_000;
 

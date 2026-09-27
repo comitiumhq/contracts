@@ -19,6 +19,7 @@ struct DeploymentOrgRegistry {
     bytes32 domainSeparator;
     address initialOwner;
     address[] initialOperators;
+    address[] initialExecutors;
 }
 
 struct DeploymentCommitmentFunds {
@@ -179,6 +180,8 @@ abstract contract BaseScript is Script {
             _quoted(vm.toString(registry.initialOwner)),
             ',"initialOperators":',
             _addressArrayJson(registry.initialOperators),
+            ',"initialExecutors":',
+            _addressArrayJson(registry.initialExecutors),
             "}"
         );
     }

@@ -242,7 +242,7 @@ contract Deploy is BaseScript, Test {
         console.log("  Address:", address(forwarder));
 
         // ── 2. OrgRegistry ─────────────────────────────────────
-        OrgRegistry registry = new OrgRegistry(deployer, address(forwarder), operator);
+        OrgRegistry registry = new OrgRegistry(deployer, address(forwarder), operator, executor);
 
         console.log("[OrgRegistry]");
         console.log("  Address:", address(registry));
@@ -287,6 +287,9 @@ contract Deploy is BaseScript, Test {
         assertEq(registry.owner(), deployer, "registry: wrong owner");
         assertEq(registry.trustedForwarder(), address(forwarder), "registry: wrong forwarder");
         assertTrue(registry.isOperator(operator), "registry: operator not set");
+        assertTrue(registry.isExecutor(executor), "registry: executor not set");
+        assertFalse(registry.isExecutor(operator), "registry: operator is executor");
+        assertFalse(registry.isOperator(executor), "registry: executor is operator");
 
         // CommitmentFunds
         assertEq(commitmentFunds.owner(), deployer, "commitmentFunds: wrong owner");
@@ -333,7 +336,8 @@ contract Deploy is BaseScript, Test {
                     address_: address(registry),
                     domainSeparator: registry.DOMAIN_SEPARATOR(),
                     initialOwner: ownerAddress,
-                    initialOperators: initialOperators
+                    initialOperators: initialOperators,
+                    initialExecutors: initialExecutors
                 }),
                 commitmentFunds: DeploymentCommitmentFunds({
                     address_: address(commitmentFunds), initialOwner: ownerAddress, initialFeeRecipient: feeRecipient

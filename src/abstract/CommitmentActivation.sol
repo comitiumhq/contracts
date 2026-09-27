@@ -96,6 +96,7 @@ abstract contract CommitmentActivation is ResponseCommitmentStorageLayout {
         address creator
     ) private {
         Commitment storage commitment = _commitments[commitmentId];
+
         commitment.postingRef = postingRef;
         commitment.creator = creator;
         commitment.stake = stake;
@@ -124,6 +125,7 @@ abstract contract CommitmentActivation is ResponseCommitmentStorageLayout {
         bytes32 structHash = CommitmentAuthorizationLib.hashCommitmentActivation(
             orgId, stake, feeTier, postingRef, creator, configVersion, keyNonce, expiry
         );
+
         _consumeOperatorAuthorization(
             structHash, CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_ACTIVATION, keyNonce, expiry, signature
         );

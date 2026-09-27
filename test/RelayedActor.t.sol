@@ -7,7 +7,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {ResponseCommitmentTestBase} from "./shared/TestBase.sol";
 import {ApplicationView, CommitmentView} from "../src/interfaces/IResponseCommitment.sol";
-import {OrgView} from "../src/interfaces/IOrgRegistry.sol";
 import {Errors} from "../src/Errors.sol";
 import {CommitmentStatus} from "../src/types/CommitmentTypes.sol";
 
@@ -26,22 +25,12 @@ contract RelayedActorTest is ResponseCommitmentTestBase {
         assertEq(responseCommitment.trustedForwarder(), address(forwarder));
     }
 
-    function test_forwardedOrgAdminOperationsUseOriginalActor() public {
+    function test_forwardedOrgAdminOperationUsesOriginalActor() public {
         _forwardAs(
             employer, address(orgRegistry), abi.encodeCall(orgRegistry.setOrgAdmin, (DEFAULT_ORG_ID, applicant1, true))
         );
 
         assertTrue(orgRegistry.isOrgAdmin(DEFAULT_ORG_ID, applicant1));
-
-        _forwardAs(
-            employer,
-            address(orgRegistry),
-            abi.encodeCall(orgRegistry.updateContentURI, (DEFAULT_ORG_ID, "ipfs://org-metadata"))
-        );
-
-        OrgView memory org = orgRegistry.org(DEFAULT_ORG_ID);
-
-        assertEq(org.contentURI, "ipfs://org-metadata");
     }
 
     function test_forwardedSetCommitmentManagerUsesOriginalActor() public {

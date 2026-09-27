@@ -191,7 +191,7 @@ contract ReentrancyTest is ResponseCommitmentTestBase {
         usdc = new ReentrantUSDC();
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
-        orgRegistry = new OrgRegistry(owner, address(forwarder), operator);
+        orgRegistry = new OrgRegistry(owner, address(forwarder), operator, executor);
         commitmentFunds = new CommitmentFunds(
             IERC20(address(usdc)), IOrgRegistry(address(orgRegistry)), feeRecipient, owner, address(forwarder)
         );

@@ -69,12 +69,13 @@ interface IOrgRegistry {
     // ---- Lifecycle ----
 
     /// @notice Create a new organization with verified domain
+    /// @param creator Product account that becomes the initial protocol admin and treasury.
     /// @param domainHash Verified domain hash
     /// @param keyNonce Packed NoncesKeyed authorization key and nonce
     /// @param expiry Timestamp after which the signature expires
     /// @param signature Operator signature approving creation
     /// @return orgId The ID of the created organization
-    function createOrg(bytes32 domainHash, uint256 keyNonce, uint256 expiry, bytes calldata signature)
+    function createOrg(address creator, bytes32 domainHash, uint256 keyNonce, uint256 expiry, bytes calldata signature)
         external
         returns (uint256 orgId);
 
@@ -82,6 +83,7 @@ interface IOrgRegistry {
     /// @param orgId Organization ID.
     /// @param currentDomainHash Expected current domain hash.
     /// @param newDomainHash New verified domain hash.
+    /// @param updater Product actor recorded in the update event.
     /// @param keyNonce Packed NoncesKeyed authorization key and nonce.
     /// @param expiry Timestamp after which the signature expires.
     /// @param signature Operator signature approving the update.
@@ -89,6 +91,7 @@ interface IOrgRegistry {
         uint256 orgId,
         bytes32 currentDomainHash,
         bytes32 newDomainHash,
+        address updater,
         uint256 keyNonce,
         uint256 expiry,
         bytes calldata signature
@@ -111,10 +114,21 @@ interface IOrgRegistry {
     /// @notice List active EIP-712 signing operators.
     function operators() external view returns (address[] memory operators_);
 
-    /// @notice Update organization content URI
-    /// @param orgId Organization ID
-    /// @param contentURI New IPFS content URI
-    function updateContentURI(uint256 orgId, string calldata contentURI) external;
+    /// @notice Check if an address may submit privileged direct calls.
+    function isExecutor(address account) external view returns (bool);
+
+    /// @notice List active privileged direct-call executors.
+    function executors() external view returns (address[] memory executors_);
+
+    /// @notice Update organization content URI with operator authorization.
+    function updateContentURI(
+        uint256 orgId,
+        string calldata contentURI,
+        address updater,
+        uint256 keyNonce,
+        uint256 expiry,
+        bytes calldata signature
+    ) external;
 
     /// @notice Enable or disable an org admin.
     /// @param orgId Organization ID.

@@ -53,7 +53,7 @@ contract ResponseCommitment is
 
         commitmentFunds = commitmentFunds_;
 
-        _addExecutorChecked(executor_);
+        _addExecutorChecked(executor_, trustedForwarder());
 
         ConfigValidationLib.validateCommitmentConfig(commitmentConfig_);
         ConfigValidationLib.validateFeeTiers(feeTiers_);
@@ -183,9 +183,7 @@ contract ResponseCommitment is
 
     /// @notice Add an EIP-712 signing operator.
     function addOperator(address operator) external onlyOwner {
-        if (_isExecutor(operator)) revert Errors.ProtocolRoleConflict(operator);
-
-        _addOperator(operator);
+        _addOperatorChecked(operator);
     }
 
     /// @notice Remove an EIP-712 signing operator.
@@ -195,7 +193,7 @@ contract ResponseCommitment is
 
     /// @notice Add a privileged direct-call executor.
     function addExecutor(address executor) external onlyOwner {
-        _addExecutorChecked(executor);
+        _addExecutorChecked(executor, trustedForwarder());
     }
 
     /// @notice Remove a privileged direct-call executor.
@@ -336,11 +334,5 @@ contract ResponseCommitment is
         for (uint8 tier = 0; tier < config.tierCount; tier++) {
             _feeTiers[version][tier] = tiers[tier];
         }
-    }
-
-    function _addExecutorChecked(address executor) private {
-        if (_isOperator(executor) || executor == trustedForwarder()) revert Errors.ProtocolRoleConflict(executor);
-
-        _addExecutor(executor);
     }
 }

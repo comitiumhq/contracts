@@ -38,29 +38,21 @@ contract OrgCreationTest is OrgTestBase {
             1,
             orgOwner1,
             keccak256("test.com"),
-            keccak256(abi.encodeCall(registry.createOrg, (_domainHash("test.com"), keyNonce, expiry, sig)))
+            keccak256(abi.encodeCall(registry.createOrg, (orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig)))
         );
 
-        vm.prank(orgOwner1);
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        vm.prank(executor);
+        registry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
     }
 
-    function test_createOrg_forwardedUsesOriginalActor() public {
+    function test_createOrg_revert_notExecutor() public {
         uint256 keyNonce = _nextDomainKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signDomain("forwarded.com", orgOwner1, keyNonce, expiry);
-        bytes memory callData =
-            abi.encodeCall(registry.createOrg, (_domainHash("forwarded.com"), keyNonce, expiry, sig));
 
-        vm.expectEmit(true, true, true, true);
-        emit IOrgRegistry.OrgCreated(1, orgOwner1, _domainHash("forwarded.com"), keccak256(callData));
-        bytes memory result = _forwardAs(orgOwner1, address(registry), callData);
-        uint256 orgId = abi.decode(result, (uint256));
-
-        OrgView memory org = registry.org(orgId);
-
-        assertEq(org.treasury, orgOwner1);
-        assertTrue(registry.isOrgAdmin(orgId, orgOwner1));
+        vm.prank(orgOwner1);
+        vm.expectRevert(Errors.NotExecutor.selector);
+        registry.createOrg(orgOwner1, _domainHash("forwarded.com"), keyNonce, expiry, sig);
     }
 
     function test_createOrg_incrementsId() public {
@@ -76,9 +68,9 @@ contract OrgCreationTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signDomain("", orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(Errors.ZeroDomainHash.selector);
-        registry.createOrg(bytes32(0), keyNonce, expiry, sig);
+        registry.createOrg(orgOwner1, bytes32(0), keyNonce, expiry, sig);
     }
 
     function test_createOrg_revert_expiredSignature() public {
@@ -86,9 +78,9 @@ contract OrgCreationTest is OrgTestBase {
         uint256 expiry = block.timestamp - 1; // expired
         bytes memory sig = _signDomain("test.com", orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(Errors.SignatureExpired.selector);
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        registry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
     }
 
     function test_createOrg_revert_reusedNonce() public {
@@ -96,25 +88,25 @@ contract OrgCreationTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signDomain("test.com", orgOwner1, keyNonce, expiry);
 
-        vm.startPrank(orgOwner1);
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        vm.startPrank(executor);
+        registry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAccountNonce(address,uint256)", operator, keyNonce + 1));
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        registry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
         vm.stopPrank();
     }
 
     function test_createOrg_revert_wrongNonceScope() public {
-        uint16 wrongScope = 1;
+        uint16 wrongScope = NONCE_SCOPE_ORG_DOMAIN_UPDATE;
         uint256 keyNonce = _packKeyNonce(wrongScope, 1);
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signDomain("test.com", orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.InvalidNonceScope.selector, wrongScope, NONCE_SCOPE_DOMAIN_VERIFICATION)
         );
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        registry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
     }
 
     function test_createOrg_revert_invalidSignature() public {
@@ -129,20 +121,19 @@ contract OrgCreationTest is OrgTestBase {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(wrongKey, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(Errors.InvalidSignature.selector);
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        registry.createOrg(orgOwner1, _domainHash("test.com"), keyNonce, expiry, sig);
     }
 
-    function test_createOrg_revert_signatureForWrongCaller() public {
+    function test_createOrg_revert_signatureBoundToDifferentCreator() public {
         uint256 keyNonce = _nextDomainKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        // Signature is for orgOwner1 but stranger calls
         bytes memory sig = _signDomain("test.com", orgOwner1, keyNonce, expiry);
 
-        vm.prank(stranger);
+        vm.prank(executor);
         vm.expectRevert(Errors.InvalidSignature.selector);
-        registry.createOrg(_domainHash("test.com"), keyNonce, expiry, sig);
+        registry.createOrg(stranger, _domainHash("test.com"), keyNonce, expiry, sig);
     }
 }
 
@@ -168,42 +159,39 @@ contract OrgDomainUpdateTest is OrgTestBase {
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry);
 
         bytes32 requestHash = keccak256(
-            abi.encodeCall(registry.updateOrgDomain, (orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig))
+            abi.encodeCall(
+                registry.updateOrgDomain, (orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig)
+            )
         );
 
         vm.expectEmit(true, false, true, true);
         emit IOrgRegistry.OrgDomainUpdated(orgId, currentDomainHash, newDomainHash, orgOwner1, requestHash);
 
-        vm.prank(orgOwner1);
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        vm.prank(executor);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
 
         OrgView memory org = registry.org(orgId);
         assertEq(org.domainHash, newDomainHash);
     }
 
-    function test_updateOrgDomain_revert_notOrgAdmin() public {
+    function test_updateOrgDomain_operatorAuthorizedNonAdmin_succeeds() public {
         uint256 keyNonce = _nextOrgDomainUpdateKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, stranger, keyNonce, expiry);
 
-        vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(Errors.NotOrgAdmin.selector, orgId, stranger));
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        vm.prank(executor);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, stranger, keyNonce, expiry, sig);
+
+        assertEq(registry.org(orgId).domainHash, newDomainHash);
     }
 
-    function test_updateOrgDomain_forwardedUsesOriginalActor() public {
+    function test_updateOrgDomain_revert_notExecutor() public {
         uint256 keyNonce = _nextOrgDomainUpdateKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry);
-        bytes memory callData = abi.encodeWithSelector(
-            registry.updateOrgDomain.selector, orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig
-        );
-
-        _forwardAs(orgOwner1, address(registry), callData);
-
-        OrgView memory org = registry.org(orgId);
-
-        assertEq(org.domainHash, newDomainHash);
+        vm.prank(orgOwner1);
+        vm.expectRevert(Errors.NotExecutor.selector);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_staleCurrentHash() public {
@@ -212,11 +200,11 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, staleHash, newDomainHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(
             abi.encodeWithSelector(Errors.OrgDomainHashMismatch.selector, orgId, staleHash, currentDomainHash)
         );
-        registry.updateOrgDomain(orgId, staleHash, newDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, staleHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_zeroDomainHash() public {
@@ -224,9 +212,9 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, bytes32(0), orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(Errors.ZeroDomainHash.selector);
-        registry.updateOrgDomain(orgId, currentDomainHash, bytes32(0), keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, bytes32(0), orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_sameDomainHash() public {
@@ -235,9 +223,9 @@ contract OrgDomainUpdateTest is OrgTestBase {
         bytes memory sig =
             _signOrgDomainUpdate(orgId, currentDomainHash, currentDomainHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(abi.encodeWithSelector(Errors.SameOrgDomainHash.selector, orgId, currentDomainHash));
-        registry.updateOrgDomain(orgId, currentDomainHash, currentDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, currentDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_reusedNonce() public {
@@ -246,19 +234,21 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        vm.prank(executor);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
 
         uint256 rollbackKeyNonce = _nextOrgDomainUpdateKeyNonce();
         bytes memory rollbackSig =
             _signOrgDomainUpdate(orgId, newDomainHash, rollbackDomainHash, orgOwner1, rollbackKeyNonce, expiry);
 
-        vm.prank(orgOwner1);
-        registry.updateOrgDomain(orgId, newDomainHash, rollbackDomainHash, rollbackKeyNonce, expiry, rollbackSig);
+        vm.prank(executor);
+        registry.updateOrgDomain(
+            orgId, newDomainHash, rollbackDomainHash, orgOwner1, rollbackKeyNonce, expiry, rollbackSig
+        );
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(abi.encodeWithSignature("InvalidAccountNonce(address,uint256)", operator, keyNonce + 1));
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_pausedRegistry_succeeds() public {
@@ -269,8 +259,8 @@ contract OrgDomainUpdateTest is OrgTestBase {
         vm.prank(contractOwner);
         registry.pause();
 
-        vm.prank(orgOwner1);
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        vm.prank(executor);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
 
         OrgView memory org = registry.org(orgId);
         assertEq(org.domainHash, newDomainHash);
@@ -281,9 +271,9 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp - 1;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(Errors.SignatureExpired.selector);
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_wrongNonceScope() public {
@@ -293,13 +283,13 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(
             abi.encodeWithSelector(
                 Errors.InvalidNonceScope.selector, NONCE_SCOPE_DOMAIN_VERIFICATION, NONCE_SCOPE_ORG_DOMAIN_UPDATE
             )
         );
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_nonExistentOrg() public {
@@ -310,9 +300,9 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(bogusOrgId, bogusCurrent, bogusNew, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(abi.encodeWithSelector(Errors.OrgNotFound.selector, bogusOrgId));
-        registry.updateOrgDomain(bogusOrgId, bogusCurrent, bogusNew, keyNonce, expiry, sig);
+        registry.updateOrgDomain(bogusOrgId, bogusCurrent, bogusNew, orgOwner1, keyNonce, expiry, sig);
     }
 
     function test_updateOrgDomain_revert_signatureBoundToDifferentUpdate() public {
@@ -323,24 +313,19 @@ contract OrgDomainUpdateTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, signedForHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner1);
+        vm.prank(executor);
         vm.expectRevert(Errors.InvalidSignature.selector);
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry, sig);
     }
 
-    function test_updateOrgDomain_revert_signatureBoundToDifferentActor() public {
-        vm.prank(orgOwner1);
-        registry.setOrgAdmin(orgId, orgOwner2, true);
-
-        // Signature binds updater = orgOwner1, but orgOwner2 (also an admin) submits it, so the recovered
-        // signer over the actor-bound struct is no longer an accepted operator.
+    function test_updateOrgDomain_revert_signatureBoundToDifferentUpdater() public {
         uint256 keyNonce = _nextOrgDomainUpdateKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signOrgDomainUpdate(orgId, currentDomainHash, newDomainHash, orgOwner1, keyNonce, expiry);
 
-        vm.prank(orgOwner2);
+        vm.prank(executor);
         vm.expectRevert(Errors.InvalidSignature.selector);
-        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, keyNonce, expiry, sig);
+        registry.updateOrgDomain(orgId, currentDomainHash, newDomainHash, orgOwner2, keyNonce, expiry, sig);
     }
 }
 
@@ -454,12 +439,8 @@ contract OrgAdminGrantTest is OrgTestBase {
         assertEq(registry.orgTreasury(orgId), orgOwner1);
     }
 
-    function test_updateContentURI_allowedForDelegatedOrgAdmin() public {
-        vm.prank(orgOwner1);
-        registry.setOrgAdmin(orgId, orgOwner2, true);
-
-        vm.prank(orgOwner2);
-        registry.updateContentURI(orgId, "ipfs://QmDelegatedAdmin");
+    function test_updateContentURI_recordsOperatorAuthorizedUpdater() public {
+        _updateOrgContent(orgId, "ipfs://QmDelegatedAdmin", orgOwner2);
 
         assertEq(registry.org(orgId).contentURI, "ipfs://QmDelegatedAdmin");
     }

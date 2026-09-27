@@ -149,7 +149,7 @@ abstract contract ResponseCommitmentTestBase is Eip3009TestHelper {
         usdc = new USDC();
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
-        orgRegistry = new OrgRegistry(owner, address(forwarder), operator);
+        orgRegistry = new OrgRegistry(owner, address(forwarder), operator, executor);
 
         commitmentFunds = new CommitmentFunds(
             IERC20(address(usdc)), IOrgRegistry(address(orgRegistry)), feeRecipient, owner, address(forwarder)
@@ -192,8 +192,8 @@ abstract contract ResponseCommitmentTestBase is Eip3009TestHelper {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        vm.prank(employerAddr);
-        orgRegistry.createOrg(_domainHash(domain), keyNonce, expiry, sig);
+        vm.prank(executor);
+        orgRegistry.createOrg(employerAddr, _domainHash(domain), keyNonce, expiry, sig);
     }
 
     function _domainHash(string memory domain) internal pure returns (bytes32) {

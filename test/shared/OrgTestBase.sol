@@ -53,15 +53,19 @@ abstract contract OrgTestBase is Eip3009TestHelper {
 
     uint256 public operatorPrivateKey = 0x1234;
     address public operator;
+    address public executor = makeAddr("executor");
     uint256 public domainVerificationNonce;
     uint256 public orgDomainUpdateNonce;
+    uint256 public orgContentUpdateNonce;
     uint256 private _testCommitmentId;
 
     uint16 internal constant NONCE_SCOPE_DOMAIN_VERIFICATION = OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION;
     uint16 internal constant NONCE_SCOPE_ORG_DOMAIN_UPDATE = OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE;
+    uint16 internal constant NONCE_SCOPE_ORG_CONTENT_UPDATE = OrgAuthorizationLib.NONCE_SCOPE_ORG_CONTENT_UPDATE;
 
     bytes32 public constant DOMAIN_VERIFICATION_TYPEHASH = OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH;
     bytes32 public constant ORG_DOMAIN_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_DOMAIN_UPDATE_TYPEHASH;
+    bytes32 public constant ORG_CONTENT_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_CONTENT_UPDATE_TYPEHASH;
 
     function setUp() public virtual {
         operator = vm.addr(operatorPrivateKey);
@@ -73,7 +77,7 @@ abstract contract OrgTestBase is Eip3009TestHelper {
         usdc = new USDC();
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
-        registry = new OrgRegistry(contractOwner, address(forwarder), operator);
+        registry = new OrgRegistry(contractOwner, address(forwarder), operator, executor);
         commitmentFunds = new CommitmentFunds(
             IERC20(address(usdc)), IOrgRegistry(address(registry)), feeRecipient, contractOwner, address(forwarder)
         );
@@ -96,8 +100,8 @@ abstract contract OrgTestBase is Eip3009TestHelper {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signDomain(domain, orgOwner, keyNonce, expiry);
 
-        vm.prank(orgOwner);
-        orgId = registry.createOrg(_domainHash(domain), keyNonce, expiry, sig);
+        vm.prank(executor);
+        orgId = registry.createOrg(orgOwner, _domainHash(domain), keyNonce, expiry, sig);
     }
 
     function _signOrgDomainUpdate(
@@ -136,6 +140,36 @@ abstract contract OrgTestBase is Eip3009TestHelper {
         orgDomainUpdateNonce++;
 
         return _packKeyNonce(NONCE_SCOPE_ORG_DOMAIN_UPDATE, orgDomainUpdateNonce);
+    }
+
+    function _signOrgContentUpdate(
+        uint256 orgId,
+        string memory contentURI,
+        address updater,
+        uint256 keyNonce,
+        uint256 expiry
+    ) internal view returns (bytes memory) {
+        bytes32 structHash = keccak256(
+            abi.encode(ORG_CONTENT_UPDATE_TYPEHASH, orgId, keccak256(bytes(contentURI)), updater, keyNonce, expiry)
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", registry.DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _nextOrgContentUpdateKeyNonce() internal returns (uint256) {
+        orgContentUpdateNonce++;
+
+        return _packKeyNonce(NONCE_SCOPE_ORG_CONTENT_UPDATE, orgContentUpdateNonce);
+    }
+
+    function _updateOrgContent(uint256 orgId, string memory contentURI, address updater) internal {
+        uint256 keyNonce = _nextOrgContentUpdateKeyNonce();
+        uint256 expiry = block.timestamp + 1 hours;
+        bytes memory signature = _signOrgContentUpdate(orgId, contentURI, updater, keyNonce, expiry);
+
+        vm.prank(executor);
+        registry.updateContentURI(orgId, contentURI, updater, keyNonce, expiry, signature);
     }
 
     function _domainHash(string memory domain) internal pure returns (bytes32) {

@@ -6,8 +6,8 @@ pragma solidity 0.8.35;
 library CommitmentAuthorizationLib {
     uint16 internal constant NONCE_SCOPE_COMMITMENT_ACTIVATION = 1;
     uint16 internal constant NONCE_SCOPE_COMMITMENT_SETTLEMENT = 2;
-    uint16 internal constant NONCE_SCOPE_COMMITMENT_STOP = 4;
-    uint16 internal constant NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT = 7;
+    uint16 internal constant NONCE_SCOPE_COMMITMENT_STOP = 3;
+    uint16 internal constant NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT = 4;
 
     bytes32 internal constant COMMITMENT_ACTIVATION_TYPEHASH = keccak256(
         "CommitmentActivation(uint256 orgId,uint256 stake,uint8 feeTier,bytes32 postingRef,address creator,uint32 configVersion,uint256 keyNonce,uint256 expiry)"

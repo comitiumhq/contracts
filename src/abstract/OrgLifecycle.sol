@@ -19,9 +19,10 @@ abstract contract OrgLifecycle is OrgStorageLayout {
     /// @param keyNonce Packed NoncesKeyed authorization key and nonce
     /// @param expiry Timestamp after which the operator signature expires
     /// @param signature Operator EIP-712 signature
-    /// @param requestHash Hash of the sender-stripped createOrg calldata.
+    /// @param requestHash Hash of the exact createOrg calldata.
     /// @return orgId The ID of the created organization
     function _createOrg(
+        address creator,
         bytes32 domainHash,
         uint256 keyNonce,
         uint256 expiry,
@@ -29,24 +30,23 @@ abstract contract OrgLifecycle is OrgStorageLayout {
         bytes32 requestHash
     ) internal returns (uint256 orgId) {
         if (domainHash == bytes32(0)) revert Errors.ZeroDomainHash();
+        if (creator == address(0)) revert Errors.ZeroAddress();
 
-        address actor = _actor();
-
-        _verifyDomainSignature(domainHash, actor, keyNonce, expiry, signature);
+        _verifyDomainSignature(domainHash, creator, keyNonce, expiry, signature);
 
         _nextOrgId++;
         orgId = _nextOrgId;
 
         Org storage orgData = _organizations[orgId];
 
-        orgData.treasury = actor;
+        orgData.treasury = creator;
         orgData.domainHash = domainHash;
 
-        bool added = _orgAdmins[orgId].add(actor);
+        bool added = _orgAdmins[orgId].add(creator);
         assert(added);
 
-        emit IOrgRegistry.OrgCreated(orgId, actor, orgData.domainHash, requestHash);
-        emit IOrgRegistry.OrgAdminUpdated(orgId, actor, true, actor, true);
+        emit IOrgRegistry.OrgCreated(orgId, creator, orgData.domainHash, requestHash);
+        emit IOrgRegistry.OrgAdminUpdated(orgId, creator, true, creator, true);
     }
 
     /// @notice Update the active org domain hash.
@@ -56,11 +56,12 @@ abstract contract OrgLifecycle is OrgStorageLayout {
     /// @param keyNonce Packed NoncesKeyed authorization key and nonce.
     /// @param expiry Timestamp after which the operator signature expires.
     /// @param signature Operator EIP-712 signature.
-    /// @param requestHash Hash of the sender-stripped updateOrgDomain calldata.
+    /// @param requestHash Hash of the exact updateOrgDomain calldata.
     function _updateOrgDomain(
         uint256 orgId,
         bytes32 currentDomainHash,
         bytes32 newDomainHash,
+        address updater,
         uint256 keyNonce,
         uint256 expiry,
         bytes calldata signature,
@@ -75,15 +76,13 @@ abstract contract OrgLifecycle is OrgStorageLayout {
             revert Errors.OrgDomainHashMismatch(orgId, currentDomainHash, orgData.domainHash);
         }
 
-        address actor = _actor();
+        if (updater == address(0)) revert Errors.ZeroAddress();
 
-        _requireOrgAdmin(orgId, actor);
-
-        _verifyOrgDomainUpdateSignature(orgId, currentDomainHash, newDomainHash, actor, keyNonce, expiry, signature);
+        _verifyOrgDomainUpdateSignature(orgId, currentDomainHash, newDomainHash, updater, keyNonce, expiry, signature);
 
         orgData.domainHash = newDomainHash;
 
-        emit IOrgRegistry.OrgDomainUpdated(orgId, currentDomainHash, newDomainHash, actor, requestHash);
+        emit IOrgRegistry.OrgDomainUpdated(orgId, currentDomainHash, newDomainHash, updater, requestHash);
     }
 
     /// @notice Enable or disable an org admin.

@@ -42,7 +42,7 @@ contract ValidateDeploymentTest is Test {
     }
 
     function test_configuredRoles_checksEveryCataloguedCommitment() public {
-        ProtocolRolesMock registry = new ProtocolRolesMock(operator, address(0));
+        ProtocolRolesMock registry = new ProtocolRolesMock(operator, executor);
         ProtocolRolesMock firstCommitment = new ProtocolRolesMock(operator, executor);
         ProtocolRolesMock secondCommitment = new ProtocolRolesMock(operator, address(0));
 

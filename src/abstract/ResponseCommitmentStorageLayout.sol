@@ -2,13 +2,12 @@
 pragma solidity 0.8.35;
 
 import {FeeTier, CommitmentConfig} from "../types/ConfigTypes.sol";
-import {OperatorAuthorizer} from "./OperatorAuthorizer.sol";
-import {ExecutorRegistry} from "./ExecutorRegistry.sol";
+import {ContractRoles} from "./ContractRoles.sol";
 import {Commitment, Application} from "../types/CommitmentTypes.sol";
 
 /// @title ResponseCommitmentStorageLayout
 /// @notice Shared plain storage layout for ResponseCommitment modules.
-abstract contract ResponseCommitmentStorageLayout is OperatorAuthorizer, ExecutorRegistry {
+abstract contract ResponseCommitmentStorageLayout is ContractRoles {
     // ============ Storage ============
 
     uint256 internal _nextCommitmentId;

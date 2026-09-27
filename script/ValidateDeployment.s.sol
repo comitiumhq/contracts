@@ -98,6 +98,8 @@ contract ValidateDeployment is BaseScript, Test {
             vm.parseJsonAddress(json, string.concat(path, ".contracts.orgRegistry.initialOwner"));
         catalog.orgRegistry.initialOperators =
             vm.parseJsonAddressArray(json, string.concat(path, ".contracts.orgRegistry.initialOperators"));
+        catalog.orgRegistry.initialExecutors =
+            vm.parseJsonAddressArray(json, string.concat(path, ".contracts.orgRegistry.initialExecutors"));
 
         catalog.commitmentFunds.address_ =
             vm.parseJsonAddress(json, string.concat(path, ".contracts.commitmentFunds.address"));
@@ -247,6 +249,10 @@ contract ValidateDeployment is BaseScript, Test {
         _assertSameAddressSet(
             "OrgRegistry initial operators", orgRegistry.operators(), catalog.orgRegistry.initialOperators
         );
+        _assertDisjointRoles(catalog.orgRegistry.initialOperators, catalog.orgRegistry.initialExecutors);
+        _assertSameAddressSet(
+            "OrgRegistry initial executors", orgRegistry.executors(), catalog.orgRegistry.initialExecutors
+        );
         assertEq(
             commitmentFunds.feeRecipient(),
             catalog.commitmentFunds.initialFeeRecipient,
@@ -285,6 +291,7 @@ contract ValidateDeployment is BaseScript, Test {
         address executor = vm.envAddress("RELAYER_ADDRESS");
 
         _assertContainsAddress("operator", OrgRegistry(catalog.orgRegistry.address_).operators(), operator);
+        _assertContainsAddress("OrgRegistry executor", OrgRegistry(catalog.orgRegistry.address_).executors(), executor);
 
         for (uint256 i = 0; i < catalog.responseCommitments.length; i++) {
             ResponseCommitment commitment = ResponseCommitment(catalog.responseCommitments[i].address_);

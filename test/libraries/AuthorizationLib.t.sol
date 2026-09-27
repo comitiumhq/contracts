@@ -24,6 +24,7 @@ contract AuthorizationLibTest is Test {
     bytes32 internal constant COMMITMENT_STOP_TYPEHASH = CommitmentAuthorizationLib.COMMITMENT_STOP_TYPEHASH;
     bytes32 internal constant DOMAIN_VERIFICATION_TYPEHASH = OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH;
     bytes32 internal constant ORG_DOMAIN_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_DOMAIN_UPDATE_TYPEHASH;
+    bytes32 internal constant ORG_CONTENT_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_CONTENT_UPDATE_TYPEHASH;
 
     /// @notice Independent oracle: frozen EIP-712 typehash digests computed out-of-band (`cast keccak` of the
     ///         canonical type string). If a source type string changes field order/name/type, the source
@@ -64,24 +65,30 @@ contract AuthorizationLibTest is Test {
             0x15ba4893100609f908434af8d2633333a29edb56b35a9c5642115cb1293f9e2b,
             "OrgDomainUpdate typehash drifted"
         );
+        assertEq(
+            OrgAuthorizationLib.ORG_CONTENT_UPDATE_TYPEHASH,
+            0xfbf541faea5aee03db3ae63400e9d68e6b0005040b3cf7d26a70acce835ea440,
+            "OrgContentUpdate typehash drifted"
+        );
     }
 
-    /// @notice Independent compatibility guard for the scoped nonce registry shared with offchain signers.
-    function test_nonceScopes_matchFrozenProtocolRegistry() public pure {
+    /// @notice Independent compatibility guard for contract-local nonce scopes shared with offchain signers.
+    function test_nonceScopes_matchFrozenContractRegistries() public pure {
         assertEq(
             CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_ACTIVATION, 1, "CommitmentActivation nonce scope drifted"
         );
         assertEq(
             CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_SETTLEMENT, 2, "CommitmentSettlement nonce scope drifted"
         );
-        assertEq(OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION, 3, "DomainVerification nonce scope drifted");
-        assertEq(CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_STOP, 4, "CommitmentStop nonce scope drifted");
-        assertEq(OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE, 6, "OrgDomainUpdate nonce scope drifted");
+        assertEq(CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_STOP, 3, "CommitmentStop nonce scope drifted");
         assertEq(
             CommitmentAuthorizationLib.NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT,
-            7,
+            4,
             "ExpiredCommitmentSettlement nonce scope drifted"
         );
+        assertEq(OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION, 1, "DomainVerification nonce scope drifted");
+        assertEq(OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE, 2, "OrgDomainUpdate nonce scope drifted");
+        assertEq(OrgAuthorizationLib.NONCE_SCOPE_ORG_CONTENT_UPDATE, 3, "OrgContentUpdate nonce scope drifted");
     }
 
     function test_hashCommitmentActivation_matchesManualVector() public pure {
@@ -198,6 +205,17 @@ contract AuthorizationLibTest is Test {
         );
     }
 
+    function test_hashOrgContentUpdate_matchesManualVector() public pure {
+        bytes32 contentURIHash = keccak256("ipfs://content");
+        bytes32 expected = keccak256(
+            abi.encode(
+                ORG_CONTENT_UPDATE_TYPEHASH, uint256(42), contentURIHash, address(0xBEEF), uint256(123), uint256(456)
+            )
+        );
+
+        assertEq(OrgAuthorizationLib.hashOrgContentUpdate(42, contentURIHash, address(0xBEEF), 123, 456), expected);
+    }
+
     function test_hashCommitmentActivation_recoversSigner() public view {
         bytes32 structHash = CommitmentAuthorizationLib.hashCommitmentActivation(
             42, 300_000_000, 1, keccak256("posting"), address(0xBEEF), 2, 123, 456
@@ -246,6 +264,13 @@ contract AuthorizationLibTest is Test {
         bytes32 structHash = OrgAuthorizationLib.hashOrgDomainUpdate(
             42, keccak256("example.com"), keccak256("new-example.com"), address(0xBEEF), 123, 456
         );
+
+        _assertRoundTrip(structHash);
+    }
+
+    function test_hashOrgContentUpdate_recoversSigner() public view {
+        bytes32 structHash =
+            OrgAuthorizationLib.hashOrgContentUpdate(42, keccak256("ipfs://content"), address(0xBEEF), 123, 456);
 
         _assertRoundTrip(structHash);
     }

@@ -36,9 +36,9 @@ contract OrgAdminTest is OrgTestBase {
         uint256 expiry = block.timestamp + 1 hours;
         bytes memory sig = _signDomain("new.com", orgOwner2, keyNonce, expiry);
 
-        vm.prank(orgOwner2);
+        vm.prank(executor);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        registry.createOrg(_domainHash("new.com"), keyNonce, expiry, sig);
+        registry.createOrg(orgOwner2, _domainHash("new.com"), keyNonce, expiry, sig);
     }
 
     function test_commitmentFundsPause_blocksDeposit() public {
@@ -86,6 +86,24 @@ contract OrgAdminTest is OrgTestBase {
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", stranger));
         registry.addOperator(makeAddr("x"));
+    }
+
+    function test_addOperator_executorAddress_reverts() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, executor));
+        registry.addOperator(executor);
+    }
+
+    function test_addExecutor_operatorAddress_reverts() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, operator));
+        registry.addExecutor(operator);
+    }
+
+    function test_addExecutor_trustedForwarder_reverts() public {
+        vm.prank(contractOwner);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, address(forwarder)));
+        registry.addExecutor(address(forwarder));
     }
 
     // ============ removeOperator ============
@@ -167,20 +185,27 @@ contract OrgAdminTest is OrgTestBase {
         vm.expectEmit(true, true, true, true);
         emit IOrgRegistry.ContentURIUpdated(orgId, orgOwner1, "ipfs://QmNewMetadata");
 
-        vm.prank(orgOwner1);
-        registry.updateContentURI(orgId, "ipfs://QmNewMetadata");
+        _updateOrgContent(orgId, "ipfs://QmNewMetadata", orgOwner1);
     }
 
-    function test_updateContentURI_revert_notOrgAdmin() public {
+    function test_updateContentURI_revert_notExecutor() public {
+        uint256 keyNonce = _nextOrgContentUpdateKeyNonce();
+        uint256 expiry = block.timestamp + 1 hours;
+        bytes memory signature = _signOrgContentUpdate(orgId, "ipfs://QmNewMetadata", stranger, keyNonce, expiry);
+
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(Errors.NotOrgAdmin.selector, orgId, stranger));
-        registry.updateContentURI(orgId, "ipfs://QmNewMetadata");
+        vm.expectRevert(Errors.NotExecutor.selector);
+        registry.updateContentURI(orgId, "ipfs://QmNewMetadata", stranger, keyNonce, expiry, signature);
     }
 
     function test_updateContentURI_revert_emptyContentURI() public {
-        vm.prank(orgOwner1);
+        uint256 keyNonce = _nextOrgContentUpdateKeyNonce();
+        uint256 expiry = block.timestamp + 1 hours;
+        bytes memory signature = _signOrgContentUpdate(orgId, "", orgOwner1, keyNonce, expiry);
+
+        vm.prank(executor);
         vm.expectRevert(Errors.EmptyContentURI.selector);
-        registry.updateContentURI(orgId, "");
+        registry.updateContentURI(orgId, "", orgOwner1, keyNonce, expiry, signature);
     }
 
     // ============ View Functions ============
