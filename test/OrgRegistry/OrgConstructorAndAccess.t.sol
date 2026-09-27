@@ -59,6 +59,6 @@ contract OrgConstructorAndAccessTest is OrgTestBase {
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", caller));
-        jobFunds.registerJobCommitment(makeAddr("fake"), 1);
+        commitmentFunds.registerResponseCommitment(makeAddr("fake"), 1);
     }
 }

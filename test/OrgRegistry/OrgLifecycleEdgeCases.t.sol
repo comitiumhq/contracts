@@ -90,13 +90,13 @@ contract OrgLifecycleEdgeCasesTest is OrgTestBase {
     function test_depositWithAuthorization_nonExistentOrg() public {
         vm.prank(orgOwner1);
         vm.expectRevert(abi.encodeWithSelector(Errors.OrgNotFound.selector, 999));
-        jobFunds.depositWithAuthorization(999, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
+        commitmentFunds.depositWithAuthorization(999, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
     }
 
     function test_withdraw_nonExistentOrg() public {
         vm.prank(orgOwner1);
         vm.expectRevert(abi.encodeWithSelector(Errors.OrgNotFound.selector, 999));
-        jobFunds.withdraw(999, 1);
+        commitmentFunds.withdraw(999, 1);
     }
 
     function test_updateContentURI_succeeds() public {

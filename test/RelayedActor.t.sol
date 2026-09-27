@@ -5,13 +5,13 @@ import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import {JobCommitmentTestBase} from "./shared/TestBase.sol";
-import {ApplicationView, JobView} from "../src/interfaces/IJobCommitment.sol";
+import {ResponseCommitmentTestBase} from "./shared/TestBase.sol";
+import {ApplicationView, CommitmentView} from "../src/interfaces/IResponseCommitment.sol";
 import {OrgView} from "../src/interfaces/IOrgRegistry.sol";
 import {Errors} from "../src/Errors.sol";
-import {JobStatus} from "../src/types/JobTypes.sol";
+import {CommitmentStatus} from "../src/types/CommitmentTypes.sol";
 
-contract RelayedActorTest is JobCommitmentTestBase {
+contract RelayedActorTest is ResponseCommitmentTestBase {
     bytes32 private constant FORWARDER_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant FORWARD_REQUEST_TYPEHASH = keccak256(
@@ -22,8 +22,8 @@ contract RelayedActorTest is JobCommitmentTestBase {
 
     function test_forwarderConfiguredOnRelayedTargets() public view {
         assertEq(orgRegistry.trustedForwarder(), address(forwarder));
-        assertEq(jobFunds.trustedForwarder(), address(forwarder));
-        assertEq(jobCommitment.trustedForwarder(), address(forwarder));
+        assertEq(commitmentFunds.trustedForwarder(), address(forwarder));
+        assertEq(responseCommitment.trustedForwarder(), address(forwarder));
     }
 
     function test_forwardedOrgAdminOperationsUseOriginalActor() public {
@@ -44,102 +44,105 @@ contract RelayedActorTest is JobCommitmentTestBase {
         assertEq(org.contentURI, "ipfs://org-metadata");
     }
 
-    function test_forwardedSetJobManagerUsesOriginalActor() public {
+    function test_forwardedSetCommitmentManagerUsesOriginalActor() public {
         _forwardAs(
-            employer, address(jobFunds), abi.encodeCall(jobFunds.setJobManager, (DEFAULT_ORG_ID, applicant1, true))
+            employer,
+            address(commitmentFunds),
+            abi.encodeCall(commitmentFunds.setCommitmentManager, (DEFAULT_ORG_ID, applicant1, true))
         );
 
-        assertTrue(jobFunds.isJobManager(DEFAULT_ORG_ID, applicant1));
-        assertTrue(jobFunds.canManageJobs(DEFAULT_ORG_ID, applicant1));
+        assertTrue(commitmentFunds.isCommitmentManager(DEFAULT_ORG_ID, applicant1));
+        assertTrue(commitmentFunds.canManageCommitments(DEFAULT_ORG_ID, applicant1));
     }
 
-    function test_forwardedCreateJobUsesOriginalActor() public {
-        uint256 keyNonce = _nextJobPublishKeyNonce();
+    function test_forwardedCreateCommitmentUsesOriginalActor() public {
+        uint256 keyNonce = _nextCommitmentActivationKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, DEFAULT_POSTING_REF, employer, keyNonce, expiry);
+        bytes memory signature = _signCommitmentActivation(
+            DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, DEFAULT_POSTING_REF, employer, keyNonce, expiry
+        );
 
         bytes memory result = _forwardAs(
             employer,
-            address(jobFunds),
+            address(commitmentFunds),
             abi.encodeCall(
-                jobFunds.publishJob,
+                commitmentFunds.activateCommitment,
                 (
-                    address(jobCommitment),
+                    address(responseCommitment),
                     DEFAULT_ORG_ID,
                     EMPLOYER_STAKE,
-                    _jobPublishFee(EMPLOYER_STAKE, 0),
+                    _commitmentActivateFee(EMPLOYER_STAKE, 0),
                     feeRecipient,
                     abi.encode(uint8(0), DEFAULT_POSTING_REF, keyNonce, expiry, signature)
                 )
             )
         );
-        uint256 jobId = abi.decode(result, (uint256));
+        uint256 commitmentId = abi.decode(result, (uint256));
 
-        JobView memory job = jobCommitment.job(jobId);
+        CommitmentView memory commitment = responseCommitment.commitment(commitmentId);
 
-        assertEq(job.creator, employer);
-        assertEq(job.postingRef, DEFAULT_POSTING_REF);
+        assertEq(commitment.creator, employer);
+        assertEq(commitment.postingRef, DEFAULT_POSTING_REF);
     }
 
-    function test_forwardedUnpublishAndCloseUseOriginalActor() public {
-        uint256 unpublishJobId = _publishJob(0);
-        uint256 unpublishKeyNonce = _nextJobUnpublishKeyNonce();
-        uint256 unpublishExpiry = block.timestamp + 1 hours;
-        bytes memory unpublishSignature =
-            _signJobUnpublish(unpublishJobId, employer, unpublishKeyNonce, unpublishExpiry);
+    function test_forwardedStopAndSettleUseOriginalActor() public {
+        uint256 stopCommitmentId = _activateCommitment(0);
+        uint256 stopKeyNonce = _nextCommitmentStopKeyNonce();
+        uint256 stopExpiry = block.timestamp + 1 hours;
+        bytes memory stopSignature = _signCommitmentStop(stopCommitmentId, employer, stopKeyNonce, stopExpiry);
 
         _forwardAs(
             employer,
-            address(jobCommitment),
+            address(responseCommitment),
             abi.encodeCall(
-                jobCommitment.unpublishJob, (unpublishJobId, unpublishKeyNonce, unpublishExpiry, unpublishSignature)
+                responseCommitment.stopCommitment, (stopCommitmentId, stopKeyNonce, stopExpiry, stopSignature)
             )
         );
 
-        assertEq(uint8(jobCommitment.job(unpublishJobId).status), uint8(JobStatus.Unpublished));
+        assertEq(uint8(responseCommitment.commitment(stopCommitmentId).status), uint8(CommitmentStatus.Stopped));
 
-        uint256 terminalJobId = _publishJob(0);
-        _unpublishJob(terminalJobId);
-        uint256 closeKeyNonce = _nextJobCloseKeyNonce();
-        uint256 closeExpiry = block.timestamp + 1 hours;
+        uint256 terminalCommitmentId = _activateCommitment(0);
+        _stopCommitment(terminalCommitmentId);
+        uint256 settleKeyNonce = _nextCommitmentSettleKeyNonce();
+        uint256 settleExpiry = block.timestamp + 1 hours;
         bytes32 counterSnapshotRoot = _counterSnapshotRoot(0);
-        bytes memory closeSignature =
-            _signJobClose(terminalJobId, 0, 0, 0, counterSnapshotRoot, employer, closeKeyNonce, closeExpiry);
+        bytes memory settleSignature = _signCommitmentSettlement(
+            terminalCommitmentId, 0, 0, 0, counterSnapshotRoot, employer, settleKeyNonce, settleExpiry
+        );
 
         _forwardAs(
             employer,
-            address(jobCommitment),
+            address(responseCommitment),
             abi.encodeCall(
-                jobCommitment.closeJob,
-                (terminalJobId, 0, 0, 0, counterSnapshotRoot, closeKeyNonce, closeExpiry, closeSignature)
+                responseCommitment.settleCommitment,
+                (terminalCommitmentId, 0, 0, 0, counterSnapshotRoot, settleKeyNonce, settleExpiry, settleSignature)
             )
         );
 
-        assertEq(uint8(jobCommitment.job(terminalJobId).status), uint8(JobStatus.Closed));
+        assertEq(uint8(responseCommitment.commitment(terminalCommitmentId).status), uint8(CommitmentStatus.Settled));
     }
 
     function test_forwardedCustodyFlowsUseOriginalActorButExecutorPathStaysRaw() public {
         uint256 depositAmount = 1_000_000;
-        uint256 availableBefore = jobFunds.availableBalance(DEFAULT_ORG_ID);
+        uint256 availableBefore = commitmentFunds.availableBalance(DEFAULT_ORG_ID);
         uint256 validAfter = 0;
         uint256 validBefore = block.timestamp + 1 hours;
-        bytes32 nonce = keccak256("forwarded-job-funds-deposit");
+        bytes32 nonce = keccak256("forwarded-commitment-funds-deposit");
         (uint8 v, bytes32 r, bytes32 s) = _signReceiveWithAuthorization(
-            address(usdc), address(jobFunds), employerPrivateKey, depositAmount, validAfter, validBefore, nonce
+            address(usdc), address(commitmentFunds), employerPrivateKey, depositAmount, validAfter, validBefore, nonce
         );
 
         usdc.mint(employer, depositAmount);
         _forwardAs(
             employer,
-            address(jobFunds),
+            address(commitmentFunds),
             abi.encodeCall(
-                jobFunds.depositWithAuthorization,
+                commitmentFunds.depositWithAuthorization,
                 (DEFAULT_ORG_ID, depositAmount, validAfter, validBefore, nonce, v, r, s)
             )
         );
 
-        assertEq(jobFunds.availableBalance(DEFAULT_ORG_ID), availableBefore + depositAmount);
+        assertEq(commitmentFunds.availableBalance(DEFAULT_ORG_ID), availableBefore + depositAmount);
 
         uint256 applicantBalanceBefore = usdc.balanceOf(applicant1);
         bytes32 applicationId = _generateApplicationId(applicant1);
@@ -149,14 +152,14 @@ contract RelayedActorTest is JobCommitmentTestBase {
 
         _forwardAs(
             applicant1,
-            address(jobCommitment),
+            address(responseCommitment),
             abi.encodeCall(
-                jobCommitment.submitApplication,
+                responseCommitment.submitApplication,
                 (applicationId, DEFAULT_RESPONSE_DEADLINE_DAYS, expiry, applicationSignature)
             )
         );
 
-        ApplicationView memory application = jobCommitment.application(applicationId);
+        ApplicationView memory application = responseCommitment.application(applicationId);
 
         assertEq(application.applicant, applicant1);
         assertEq(usdc.balanceOf(applicant1), applicantBalanceBefore);
@@ -167,51 +170,53 @@ contract RelayedActorTest is JobCommitmentTestBase {
         vm.expectRevert(Errors.NotExecutor.selector);
         _forwardAs(
             operator,
-            address(jobCommitment),
-            abi.encodeCall(jobCommitment.recordApplicationResponse, (directApplicationId, responseId))
+            address(responseCommitment),
+            abi.encodeCall(responseCommitment.recordApplicationResponse, (directApplicationId, responseId))
         );
     }
 
-    function test_nonConfiguredForwarderCannotSpoofJobCreator() public {
-        uint256 keyNonce = _nextJobPublishKeyNonce();
+    function test_nonConfiguredForwarderCannotSpoofCommitmentCreator() public {
+        uint256 keyNonce = _nextCommitmentActivationKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature =
-            _signJobPublish(DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, DEFAULT_POSTING_REF, employer, keyNonce, expiry);
+        bytes memory signature = _signCommitmentActivation(
+            DEFAULT_ORG_ID, EMPLOYER_STAKE, 0, DEFAULT_POSTING_REF, employer, keyNonce, expiry
+        );
         bytes memory callData = abi.encodeCall(
-            jobFunds.publishJob,
+            commitmentFunds.activateCommitment,
             (
-                address(jobCommitment),
+                address(responseCommitment),
                 DEFAULT_ORG_ID,
                 EMPLOYER_STAKE,
-                _jobPublishFee(EMPLOYER_STAKE, 0),
+                _commitmentActivateFee(EMPLOYER_STAKE, 0),
                 feeRecipient,
                 abi.encode(uint8(0), DEFAULT_POSTING_REF, keyNonce, expiry, signature)
             )
         );
 
         vm.prank(applicant1);
-        (bool success, bytes memory revertData) = address(jobFunds).call(bytes.concat(callData, bytes20(employer)));
+        (bool success, bytes memory revertData) =
+            address(commitmentFunds).call(bytes.concat(callData, bytes20(employer)));
 
         assertFalse(success);
-        assertEq(revertData, abi.encodeWithSelector(Errors.NotJobManager.selector, DEFAULT_ORG_ID, applicant1));
+        assertEq(revertData, abi.encodeWithSelector(Errors.NotCommitmentManager.selector, DEFAULT_ORG_ID, applicant1));
     }
 
     // Owner-only controls use the raw caller, even when the owner signs a forwarded request.
 
-    function test_forwardedCallCannotSpoofOwner_jobCommitmentPause() public {
+    function test_forwardedCallCannotSpoofOwner_responseCommitmentPause() public {
         vm.prank(owner);
-        jobCommitment.pause();
-        assertTrue(jobCommitment.paused());
+        responseCommitment.pause();
+        assertTrue(responseCommitment.paused());
         vm.prank(owner);
-        jobCommitment.unpause();
+        responseCommitment.unpause();
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(forwarder)));
-        _forwardAs(owner, address(jobCommitment), abi.encodeCall(jobCommitment.pause, ()));
+        _forwardAs(owner, address(responseCommitment), abi.encodeCall(responseCommitment.pause, ()));
     }
 
-    function test_forwardedCallCannotSpoofOwner_jobFundsPause() public {
+    function test_forwardedCallCannotSpoofOwner_commitmentFundsPause() public {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(forwarder)));
-        _forwardAs(owner, address(jobFunds), abi.encodeCall(jobFunds.pause, ()));
+        _forwardAs(owner, address(commitmentFunds), abi.encodeCall(commitmentFunds.pause, ()));
     }
 
     function test_forwardedCallCannotSpoofOwner_orgRegistryPause() public {
@@ -223,12 +228,14 @@ contract RelayedActorTest is JobCommitmentTestBase {
         address rogueOperator = makeAddr("rogueOperator");
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(forwarder)));
-        _forwardAs(owner, address(jobCommitment), abi.encodeCall(jobCommitment.addOperator, (rogueOperator)));
+        _forwardAs(owner, address(responseCommitment), abi.encodeCall(responseCommitment.addOperator, (rogueOperator)));
     }
 
     function test_forwardedCallCannotSpoofOwner_rescueTokens() public {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(forwarder)));
-        _forwardAs(owner, address(jobFunds), abi.encodeCall(jobFunds.rescueTokens, (address(usdc), owner, 1)));
+        _forwardAs(
+            owner, address(commitmentFunds), abi.encodeCall(commitmentFunds.rescueTokens, (address(usdc), owner, 1))
+        );
     }
 
     function _forwardRequest(uint256 signerPrivateKey, address to, bytes memory callData)

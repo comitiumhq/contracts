@@ -2,7 +2,7 @@
 pragma solidity 0.8.35;
 
 import {IOrgRegistry} from "../../src/interfaces/IOrgRegistry.sol";
-import {IJobFunds} from "../../src/interfaces/IJobFunds.sol";
+import {ICommitmentFunds} from "../../src/interfaces/ICommitmentFunds.sol";
 import {OperatorAuthorizer} from "../../src/abstract/OperatorAuthorizer.sol";
 import {Errors} from "../../src/Errors.sol";
 
@@ -41,13 +41,13 @@ contract OrgAdminTest is OrgTestBase {
         registry.createOrg(_domainHash("new.com"), keyNonce, expiry, sig);
     }
 
-    function test_jobFundsPause_blocksDeposit() public {
+    function test_commitmentFundsPause_blocksDeposit() public {
         vm.prank(contractOwner);
-        jobFunds.pause();
+        commitmentFunds.pause();
 
         vm.prank(orgOwner1);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        jobFunds.depositWithAuthorization(orgId, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
+        commitmentFunds.depositWithAuthorization(orgId, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
     }
 
     function test_unpause() public {
@@ -58,7 +58,7 @@ contract OrgAdminTest is OrgTestBase {
 
         // Should work after unpause
         _fundAndDeposit(orgId, orgOwner1, 1_000_000);
-        assertEq(jobFunds.availableBalance(orgId), 1_000_000);
+        assertEq(commitmentFunds.availableBalance(orgId), 1_000_000);
     }
 
     // ============ addOperator ============
@@ -113,44 +113,52 @@ contract OrgAdminTest is OrgTestBase {
 
     // ============ commitment routing ============
 
-    function test_registerJobCommitmentAndSetCurrent() public {
-        address newJobCommitment = _deployTestCommitment();
+    function test_registerResponseCommitmentAndSetCurrent() public {
+        address newResponseCommitment = _deployTestCommitment();
 
         vm.expectEmit(true, true, true, true);
-        emit IJobFunds.JobCommitmentRegistered(newJobCommitment, 1);
+        emit ICommitmentFunds.ResponseCommitmentRegistered(newResponseCommitment, 1);
 
         vm.prank(contractOwner);
-        jobFunds.registerJobCommitment(newJobCommitment, 1);
+        commitmentFunds.registerResponseCommitment(newResponseCommitment, 1);
 
         vm.expectEmit(true, true, true, true);
-        emit IJobFunds.CurrentJobCommitmentUpdated(address(0), newJobCommitment);
+        emit ICommitmentFunds.CurrentResponseCommitmentUpdated(address(0), newResponseCommitment);
 
         vm.prank(contractOwner);
-        jobFunds.setCurrentJobCommitment(newJobCommitment);
+        commitmentFunds.setCurrentResponseCommitment(newResponseCommitment);
 
-        assertEq(jobFunds.currentJobCommitment(), newJobCommitment);
+        assertEq(commitmentFunds.currentResponseCommitment(), newResponseCommitment);
     }
 
-    function test_registerJobCommitment_revert_zeroAddress() public {
+    function test_registerResponseCommitment_revert_zeroAddress() public {
         vm.prank(contractOwner);
         vm.expectRevert(Errors.ZeroAddress.selector);
-        jobFunds.registerJobCommitment(address(0), 1);
+        commitmentFunds.registerResponseCommitment(address(0), 1);
     }
 
-    function test_registerJobCommitment_revert_notContract() public {
+    function test_registerResponseCommitment_revert_notContract() public {
         address notContract = makeAddr("notContract");
 
         vm.prank(contractOwner);
         vm.expectRevert(abi.encodeWithSelector(Errors.ContractExpected.selector, notContract));
-        jobFunds.registerJobCommitment(notContract, 1);
+        commitmentFunds.registerResponseCommitment(notContract, 1);
     }
 
-    function test_registerJobCommitment_revert_wrongVersion() public {
+    function test_registerResponseCommitment_revert_wrongVersion() public {
         address commitment = _deployTestCommitment();
 
         vm.prank(contractOwner);
-        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidJobCommitment.selector, commitment));
-        jobFunds.registerJobCommitment(commitment, 2);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidResponseCommitment.selector, commitment));
+        commitmentFunds.registerResponseCommitment(commitment, 2);
+    }
+
+    function test_registerResponseCommitment_revert_zeroVersion() public {
+        address commitment = _deployTestCommitment();
+
+        vm.prank(contractOwner);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidResponseCommitment.selector, commitment));
+        commitmentFunds.registerResponseCommitment(commitment, 0);
     }
 
     // ============ updateContentURI ============

@@ -25,7 +25,7 @@ contract OrgCreationTest is OrgTestBase {
         address[] memory admins = registry.orgAdmins(orgId);
         assertEq(admins.length, 1);
         assertEq(admins[0], orgOwner1);
-        assertEq(jobFunds.availableBalance(orgId), 0);
+        assertEq(commitmentFunds.availableBalance(orgId), 0);
     }
 
     function test_createOrg_emitsEvent() public {

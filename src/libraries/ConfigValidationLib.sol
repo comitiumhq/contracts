@@ -2,7 +2,7 @@
 pragma solidity 0.8.35;
 
 import {BASIS_POINTS} from "../Constants.sol";
-import {FeeTier, JobConfig, SlashingTable} from "../types/ConfigTypes.sol";
+import {FeeTier, CommitmentConfig, SlashingTable} from "../types/ConfigTypes.sol";
 import {Errors} from "../Errors.sol";
 
 // ============ Validation Bounds ============
@@ -16,18 +16,18 @@ uint8 constant MIN_FEE_TIERS = 1;
 uint8 constant MAX_FEE_TIERS = 10;
 uint8 constant APPLICATION_DEADLINE_DAYS_UPPER = 30;
 uint16 constant MAX_BATCH_SIZE_UPPER = 50;
-uint32 constant MAX_UNPUBLISHED_DURATION_LOWER = 30 days;
-uint32 constant MAX_UNPUBLISHED_DURATION_UPPER = 365 days;
-uint32 constant MAX_PUBLISHED_DURATION_LOWER = 90 days;
-uint32 constant MAX_PUBLISHED_DURATION_UPPER = 730 days;
+uint32 constant MAX_STOPPED_DURATION_LOWER = 30 days;
+uint32 constant MAX_STOPPED_DURATION_UPPER = 365 days;
+uint32 constant MAX_ACTIVE_DURATION_LOWER = 90 days;
+uint32 constant MAX_ACTIVE_DURATION_UPPER = 730 days;
 
 /// @title ConfigValidationLib
 /// @notice Validation logic for protocol configuration parameters
 /// @dev Internal-only helper library; it does not require deployment or linking.
 library ConfigValidationLib {
-    /// @notice Validate a versioned job configuration.
-    /// @param c Job configuration to validate.
-    function validateJobConfig(JobConfig memory c) internal pure {
+    /// @notice Validate a versioned commitment configuration.
+    /// @param c Commitment configuration to validate.
+    function validateCommitmentConfig(CommitmentConfig memory c) internal pure {
         if (c.minStake < MIN_STAKE_LOWER) revert Errors.ConfigValueTooLow("minStake");
         if (c.minStake > MIN_STAKE_UPPER) revert Errors.ConfigValueTooHigh("minStake");
         if (c.tierCount < MIN_FEE_TIERS || c.tierCount > MAX_FEE_TIERS) {
@@ -38,24 +38,22 @@ library ConfigValidationLib {
             revert Errors.ConfigValueOutOfRange("maxBatchSize");
         }
 
-        if (
-            c.maxUnpublishedDuration < MAX_UNPUBLISHED_DURATION_LOWER
-                || c.maxUnpublishedDuration > MAX_UNPUBLISHED_DURATION_UPPER
-        ) revert Errors.ConfigValueOutOfRange("maxUnpublishedDuration");
+        if (c.maxStoppedDuration < MAX_STOPPED_DURATION_LOWER || c.maxStoppedDuration > MAX_STOPPED_DURATION_UPPER) {
+            revert Errors.ConfigValueOutOfRange("maxStoppedDuration");
+        }
 
-        if (
-            c.maxPublishedDuration < MAX_PUBLISHED_DURATION_LOWER
-                || c.maxPublishedDuration > MAX_PUBLISHED_DURATION_UPPER
-        ) revert Errors.ConfigValueOutOfRange("maxPublishedDuration");
+        if (c.maxActiveDuration < MAX_ACTIVE_DURATION_LOWER || c.maxActiveDuration > MAX_ACTIVE_DURATION_UPPER) {
+            revert Errors.ConfigValueOutOfRange("maxActiveDuration");
+        }
 
-        if (c.maxPublishedDuration <= c.maxUnpublishedDuration) revert Errors.InvalidDurationOrdering();
+        if (c.maxActiveDuration <= c.maxStoppedDuration) revert Errors.InvalidDurationOrdering();
 
         _validateSlashingTable(c.harshSlashing);
         _validateSlashingTable(c.softSlashing);
         _validateHarshVsSoft(c.harshSlashing, c.softSlashing);
     }
 
-    /// @notice Validate dynamic fee tiers for one job config version.
+    /// @notice Validate dynamic fee tiers for one commitment config version.
     /// @param tiers Fee tiers ordered from cheapest/shortest to highest/longest.
     function validateFeeTiers(FeeTier[] memory tiers) internal pure {
         if (tiers.length < MIN_FEE_TIERS || tiers.length > MAX_FEE_TIERS) {

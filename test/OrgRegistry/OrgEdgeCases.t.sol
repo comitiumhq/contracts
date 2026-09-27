@@ -6,7 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.sol";
 
 import {OrgRegistry} from "../../src/OrgRegistry.sol";
-import {JobFunds} from "../../src/JobFunds.sol";
+import {CommitmentFunds} from "../../src/CommitmentFunds.sol";
 
 import {IOrgRegistry} from "../../src/interfaces/IOrgRegistry.sol";
 import {OrgTestBase} from "../shared/OrgTestBase.sol";
@@ -16,7 +16,7 @@ import {OrgTestBase} from "../shared/OrgTestBase.sol";
 contract OrgReentrancyTest is OrgTestBase {
     ReentrantOrgToken reentrantToken;
     OrgRegistry reentrantRegistry;
-    JobFunds reentrantJobFunds;
+    CommitmentFunds reentrantCommitmentFunds;
 
     function setUp() public override {
         // Don't call super - custom setup with reentrant token
@@ -30,7 +30,7 @@ contract OrgReentrancyTest is OrgTestBase {
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
         reentrantRegistry = new OrgRegistry(contractOwner, address(forwarder), operator);
-        reentrantJobFunds = new JobFunds(
+        reentrantCommitmentFunds = new CommitmentFunds(
             IERC20(address(reentrantToken)),
             IOrgRegistry(address(reentrantRegistry)),
             feeRecipient,
@@ -58,11 +58,11 @@ contract OrgReentrancyTest is OrgTestBase {
         uint256 depositAmount = 5_000_000_000;
 
         reentrantToken.setAttack(
-            address(reentrantJobFunds),
+            address(reentrantCommitmentFunds),
             false, // not on transfer
             true, // on transferFrom
             abi.encodeWithSelector(
-                reentrantJobFunds.depositWithAuthorization.selector,
+                reentrantCommitmentFunds.depositWithAuthorization.selector,
                 orgId,
                 1_000_000,
                 0,
@@ -75,11 +75,15 @@ contract OrgReentrancyTest is OrgTestBase {
         );
 
         vm.prank(orgOwner1);
-        reentrantJobFunds.depositWithAuthorization(
+        reentrantCommitmentFunds.depositWithAuthorization(
             orgId, depositAmount, 0, block.timestamp + 1 hours, bytes32(uint256(1)), 0, bytes32(0), bytes32(0)
         );
 
-        assertEq(reentrantJobFunds.availableBalance(orgId), depositAmount, "Only one deposit should have been recorded");
+        assertEq(
+            reentrantCommitmentFunds.availableBalance(orgId),
+            depositAmount,
+            "Only one deposit should have been recorded"
+        );
         assertFalse(reentrantToken.lastAttackSucceeded(), "Nested deposit should be blocked by the guard");
         assertEq(reentrantToken.lastAttackRevertData(), abi.encodeWithSignature("ReentrancyGuardReentrantCall()"));
     }

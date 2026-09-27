@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {JobStatus} from "./types/JobTypes.sol";
+import {CommitmentStatus} from "./types/CommitmentTypes.sol";
 
 /// @title Errors
 /// @notice Custom errors shared across Comitium contracts.
@@ -57,11 +57,11 @@ library Errors {
     /// @notice Signed fee recipient no longer matches the current protocol recipient
     error FeeRecipientMismatch(address expected, address current);
 
-    /// @notice Signed publishing fee does not match the selected commitment configuration
+    /// @notice Signed activation fee does not match the selected commitment configuration
     error FeeAmountMismatch(uint256 expected, uint256 actual);
 
-    /// @notice Commitment contract does not match this JobFunds configuration
-    error InvalidJobCommitment(address jobCommitment);
+    /// @notice Commitment contract does not match this CommitmentFunds configuration
+    error InvalidResponseCommitment(address responseCommitment);
 
     // ============ Organization ============
 
@@ -110,25 +110,25 @@ library Errors {
     /// @notice Proposed treasury must differ from the current org treasury
     error SameOrgTreasury(uint256 orgId, address treasury);
 
-    // ============ Job Funds ============
+    // ============ Commitment Funds ============
 
     /// @notice Commitment contract is not registered
-    error JobCommitmentNotRegistered(address jobCommitment);
+    error ResponseCommitmentNotRegistered(address responseCommitment);
 
     /// @notice Commitment contract is already registered
-    error JobCommitmentAlreadyRegistered(address jobCommitment);
+    error ResponseCommitmentAlreadyRegistered(address responseCommitment);
 
-    /// @notice Commitment contract is not the current deployment used for new jobs
-    error JobCommitmentNotCurrent(address requested, address current);
+    /// @notice Commitment contract is not the current deployment used for new commitments
+    error ResponseCommitmentNotCurrent(address requested, address current);
 
-    /// @notice Job is already locked for this JobCommitment
-    error JobAlreadyLocked(address jobCommitment, uint256 jobId);
+    /// @notice Commitment is already locked for this ResponseCommitment
+    error CommitmentAlreadyLocked(address responseCommitment, uint256 commitmentId);
 
-    /// @notice Job is not locked for this JobCommitment
-    error JobNotLocked(address jobCommitment, uint256 jobId);
+    /// @notice Commitment is not locked for this ResponseCommitment
+    error CommitmentNotLocked(address responseCommitment, uint256 commitmentId);
 
     /// @notice Provided org ID does not match the stored lock org ID
-    error JobLockOrgMismatch(uint256 providedOrgId, uint256 lockedOrgId);
+    error CommitmentLockOrgMismatch(uint256 providedOrgId, uint256 lockedOrgId);
 
     /// @notice Return amount exceeds the original locked amount
     error ExceedsLockedAmount(uint256 returnAmount, uint256 originalAmount);
@@ -136,13 +136,13 @@ library Errors {
     /// @notice Available balance is too low
     error InsufficientBalance(uint256 requested, uint256 available);
 
-    /// @notice Account is not authorized to manage jobs for the org
-    error NotJobManager(uint256 orgId, address account);
+    /// @notice Account is not authorized to manage commitments for the org
+    error NotCommitmentManager(uint256 orgId, address account);
 
-    /// @notice Caller is not the JobFunds contract bound to this JobCommitment
-    error NotJobFunds(address caller);
+    /// @notice Caller is not the CommitmentFunds contract bound to this ResponseCommitment
+    error NotCommitmentFunds(address caller);
 
-    // ============ Job Commitment ============
+    // ============ Response Commitment ============
 
     /// @notice Stake amount is below minimum
     error StakeTooLow(uint256 provided, uint256 minimum);
@@ -150,17 +150,14 @@ library Errors {
     /// @notice Invalid fee tier
     error InvalidFeeTier(uint8 provided);
 
-    /// @notice Job does not exist
-    error JobNotFound(uint256 jobId);
+    /// @notice Commitment does not exist
+    error CommitmentNotFound(uint256 commitmentId);
 
-    /// @notice Job is not in the expected status
-    error InvalidJobStatus(JobStatus current, JobStatus expected);
+    /// @notice Commitment is not in the expected status
+    error InvalidCommitmentStatus(CommitmentStatus current, CommitmentStatus expected);
 
-    /// @notice Job has already been closed
-    error JobAlreadyClosed(uint256 jobId);
-
-    /// @notice Job org stake has already been settled
-    error OrgStakeAlreadySettled(uint256 jobId);
+    /// @notice Commitment has already been settled
+    error CommitmentAlreadySettled(uint256 commitmentId);
 
     /// @notice Application does not exist
     error ApplicationNotFound(bytes32 applicationId);
@@ -174,8 +171,8 @@ library Errors {
     /// @notice Application already responded to
     error ApplicationAlreadyResponded(bytes32 applicationId);
 
-    /// @notice Job has not expired yet
-    error JobNotExpired(uint256 referenceTime, uint256 expirationPeriod, uint256 currentTime);
+    /// @notice Commitment has not expired yet
+    error CommitmentNotExpired(uint256 referenceTime, uint256 expirationPeriod, uint256 currentTime);
 
     /// @notice Application ID already used
     error ApplicationIdAlreadyUsed(bytes32 applicationId);
@@ -232,7 +229,7 @@ library Errors {
     /// @notice Configuration tier or slashing ordering violated
     error InvalidTierOrdering();
 
-    /// @notice Job duration ordering violated (published must exceed unpublished)
+    /// @notice Commitment duration ordering violated (active must exceed stopped)
     error InvalidDurationOrdering();
 
     /// @notice Slashing rate ordering violated (must be monotonically decreasing)

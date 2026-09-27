@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-import {JobAuthorizationLib} from "../../src/libraries/JobAuthorizationLib.sol";
+import {CommitmentAuthorizationLib} from "../../src/libraries/CommitmentAuthorizationLib.sol";
 import {OrgAuthorizationLib} from "../../src/libraries/OrgAuthorizationLib.sol";
 
 contract AuthorizationLibTest is Test {
@@ -14,11 +14,14 @@ contract AuthorizationLibTest is Test {
 
     // Reference the library's own typehash constants (not local copies) so the *_matchesManualVector tests
     // exercise the real source values — a re-declared copy would silently hide a source drift.
-    bytes32 internal constant JOB_PUBLISH_TYPEHASH = JobAuthorizationLib.JOB_PUBLISH_TYPEHASH;
-    bytes32 internal constant APPLICATION_TYPEHASH = JobAuthorizationLib.APPLICATION_TYPEHASH;
-    bytes32 internal constant JOB_CLOSE_TYPEHASH = JobAuthorizationLib.JOB_CLOSE_TYPEHASH;
-    bytes32 internal constant JOB_EXPIRED_SETTLEMENT_TYPEHASH = JobAuthorizationLib.JOB_EXPIRED_SETTLEMENT_TYPEHASH;
-    bytes32 internal constant JOB_UNPUBLISH_TYPEHASH = JobAuthorizationLib.JOB_UNPUBLISH_TYPEHASH;
+    bytes32 internal constant COMMITMENT_ACTIVATION_TYPEHASH =
+        CommitmentAuthorizationLib.COMMITMENT_ACTIVATION_TYPEHASH;
+    bytes32 internal constant APPLICATION_TYPEHASH = CommitmentAuthorizationLib.APPLICATION_TYPEHASH;
+    bytes32 internal constant COMMITMENT_SETTLEMENT_TYPEHASH =
+        CommitmentAuthorizationLib.COMMITMENT_SETTLEMENT_TYPEHASH;
+    bytes32 internal constant EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH =
+        CommitmentAuthorizationLib.EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH;
+    bytes32 internal constant COMMITMENT_STOP_TYPEHASH = CommitmentAuthorizationLib.COMMITMENT_STOP_TYPEHASH;
     bytes32 internal constant DOMAIN_VERIFICATION_TYPEHASH = OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH;
     bytes32 internal constant ORG_DOMAIN_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_DOMAIN_UPDATE_TYPEHASH;
 
@@ -27,29 +30,29 @@ contract AuthorizationLibTest is Test {
     ///         constant changes and these fail — catching the exact bug the self-consistent vector tests cannot.
     function test_typehashes_matchFrozenEip712Spec() public pure {
         assertEq(
-            JobAuthorizationLib.JOB_PUBLISH_TYPEHASH,
-            0xef0e224912ea70bee1428bdfe4a9168c3560d360be2fa73eeb9c4ebb05f82250,
-            "JobPublish typehash drifted"
+            CommitmentAuthorizationLib.COMMITMENT_ACTIVATION_TYPEHASH,
+            0x4fedbf3814794c013db1a0efc0524d373cc966420259442455509a60d99c190c,
+            "CommitmentActivation typehash drifted"
         );
         assertEq(
-            JobAuthorizationLib.APPLICATION_TYPEHASH,
+            CommitmentAuthorizationLib.APPLICATION_TYPEHASH,
             0xe2d955395daec500734d9c439eabd7e1e018212fdb7590d8bdb0d852a4a5a9be,
             "Application typehash drifted"
         );
         assertEq(
-            JobAuthorizationLib.JOB_CLOSE_TYPEHASH,
-            0x8f6fe62b0f35c742b8272c1a2094c94999a3efb16ba9d092f6255197288cba0f,
-            "JobClose typehash drifted"
+            CommitmentAuthorizationLib.COMMITMENT_SETTLEMENT_TYPEHASH,
+            0x9b475acf93f4aeae20c5fab82c320c75709a3e3d8a1dd46e77acb1cc7266d684,
+            "CommitmentSettlement typehash drifted"
         );
         assertEq(
-            JobAuthorizationLib.JOB_EXPIRED_SETTLEMENT_TYPEHASH,
-            0x5c39d47b74c2e59692dacd7e1a5941d7d1a343c34763cb9661edeb805b0dfb65,
-            "JobExpiredSettlement typehash drifted"
+            CommitmentAuthorizationLib.EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH,
+            0x9e57d76e8ea4f87ac9e4c572a4fb7133944c464f851b1340b357da70454ae751,
+            "ExpiredCommitmentSettlement typehash drifted"
         );
         assertEq(
-            JobAuthorizationLib.JOB_UNPUBLISH_TYPEHASH,
-            0xcf2a0216dd030f5b6d77690409771dafdd532eb960861c3aa60179142561baa5,
-            "JobUnpublish typehash drifted"
+            CommitmentAuthorizationLib.COMMITMENT_STOP_TYPEHASH,
+            0x8cebc15e0b1f0bd3ec66da56cc19765a3b2a746fde535d00b55550a8c9124121,
+            "CommitmentStop typehash drifted"
         );
         assertEq(
             OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH,
@@ -65,19 +68,27 @@ contract AuthorizationLibTest is Test {
 
     /// @notice Independent compatibility guard for the scoped nonce registry shared with offchain signers.
     function test_nonceScopes_matchFrozenProtocolRegistry() public pure {
-        assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_PUBLISH, 1, "JobPublish nonce scope drifted");
-        assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_CLOSE, 2, "JobClose nonce scope drifted");
+        assertEq(
+            CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_ACTIVATION, 1, "CommitmentActivation nonce scope drifted"
+        );
+        assertEq(
+            CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_SETTLEMENT, 2, "CommitmentSettlement nonce scope drifted"
+        );
         assertEq(OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION, 3, "DomainVerification nonce scope drifted");
-        assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_UNPUBLISH, 4, "JobUnpublish nonce scope drifted");
+        assertEq(CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_STOP, 4, "CommitmentStop nonce scope drifted");
         assertEq(OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE, 6, "OrgDomainUpdate nonce scope drifted");
-        assertEq(JobAuthorizationLib.NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT, 7, "JobExpiredSettlement nonce scope drifted");
+        assertEq(
+            CommitmentAuthorizationLib.NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT,
+            7,
+            "ExpiredCommitmentSettlement nonce scope drifted"
+        );
     }
 
-    function test_hashJobPublish_matchesManualVector() public pure {
+    function test_hashCommitmentActivation_matchesManualVector() public pure {
         bytes32 postingRef = keccak256("posting");
         bytes32 expected = keccak256(
             abi.encode(
-                JOB_PUBLISH_TYPEHASH,
+                COMMITMENT_ACTIVATION_TYPEHASH,
                 uint256(42),
                 uint256(300_000_000),
                 uint8(1),
@@ -90,7 +101,10 @@ contract AuthorizationLibTest is Test {
         );
 
         assertEq(
-            JobAuthorizationLib.hashJobPublish(42, 300_000_000, 1, postingRef, address(0xBEEF), 2, 123, 456), expected
+            CommitmentAuthorizationLib.hashCommitmentActivation(
+                42, 300_000_000, 1, postingRef, address(0xBEEF), 2, 123, 456
+            ),
+            expected
         );
     }
 
@@ -99,14 +113,14 @@ contract AuthorizationLibTest is Test {
         bytes32 expected =
             keccak256(abi.encode(APPLICATION_TYPEHASH, applicationId, address(0xCAFE), uint8(7), uint256(456)));
 
-        assertEq(JobAuthorizationLib.hashApplication(applicationId, address(0xCAFE), 7, 456), expected);
+        assertEq(CommitmentAuthorizationLib.hashApplication(applicationId, address(0xCAFE), 7, 456), expected);
     }
 
-    function test_hashJobClose_matchesManualVector() public pure {
+    function test_hashCommitmentSettlement_matchesManualVector() public pure {
         bytes32 counterSnapshotRoot = keccak256("counter-root");
         bytes32 expected = keccak256(
             abi.encode(
-                JOB_CLOSE_TYPEHASH,
+                COMMITMENT_SETTLEMENT_TYPEHASH,
                 uint256(7),
                 uint32(10),
                 uint32(9),
@@ -119,15 +133,18 @@ contract AuthorizationLibTest is Test {
         );
 
         assertEq(
-            JobAuthorizationLib.hashJobClose(7, 10, 9, 8, counterSnapshotRoot, address(0xBEEF), 999, 456), expected
+            CommitmentAuthorizationLib.hashCommitmentSettlement(
+                7, 10, 9, 8, counterSnapshotRoot, address(0xBEEF), 999, 456
+            ),
+            expected
         );
     }
 
-    function test_hashJobExpiredSettlement_matchesManualVector() public pure {
+    function test_hashExpiredCommitmentSettlement_matchesManualVector() public pure {
         bytes32 counterSnapshotRoot = keccak256("counter-root");
         bytes32 expected = keccak256(
             abi.encode(
-                JOB_EXPIRED_SETTLEMENT_TYPEHASH,
+                EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH,
                 uint256(7),
                 uint32(10),
                 uint32(9),
@@ -138,14 +155,17 @@ contract AuthorizationLibTest is Test {
             )
         );
 
-        assertEq(JobAuthorizationLib.hashJobExpiredSettlement(7, 10, 9, 8, counterSnapshotRoot, 999, 456), expected);
+        assertEq(
+            CommitmentAuthorizationLib.hashExpiredCommitmentSettlement(7, 10, 9, 8, counterSnapshotRoot, 999, 456),
+            expected
+        );
     }
 
-    function test_hashJobUnpublish_matchesManualVector() public pure {
+    function test_hashCommitmentStop_matchesManualVector() public pure {
         bytes32 expected =
-            keccak256(abi.encode(JOB_UNPUBLISH_TYPEHASH, uint256(7), address(0xBEEF), uint256(123), uint256(456)));
+            keccak256(abi.encode(COMMITMENT_STOP_TYPEHASH, uint256(7), address(0xBEEF), uint256(123), uint256(456)));
 
-        assertEq(JobAuthorizationLib.hashJobUnpublish(7, address(0xBEEF), 123, 456), expected);
+        assertEq(CommitmentAuthorizationLib.hashCommitmentStop(7, address(0xBEEF), 123, 456), expected);
     }
 
     function test_hashDomainVerification_matchesManualVector() public pure {
@@ -178,35 +198,39 @@ contract AuthorizationLibTest is Test {
         );
     }
 
-    function test_hashJobPublish_recoversSigner() public view {
-        bytes32 structHash =
-            JobAuthorizationLib.hashJobPublish(42, 300_000_000, 1, keccak256("posting"), address(0xBEEF), 2, 123, 456);
+    function test_hashCommitmentActivation_recoversSigner() public view {
+        bytes32 structHash = CommitmentAuthorizationLib.hashCommitmentActivation(
+            42, 300_000_000, 1, keccak256("posting"), address(0xBEEF), 2, 123, 456
+        );
 
         _assertRoundTrip(structHash);
     }
 
     function test_hashApplication_recoversSigner() public view {
-        bytes32 structHash = JobAuthorizationLib.hashApplication(keccak256("application"), address(0xCAFE), 7, 456);
-
-        _assertRoundTrip(structHash);
-    }
-
-    function test_hashJobClose_recoversSigner() public view {
         bytes32 structHash =
-            JobAuthorizationLib.hashJobClose(7, 10, 9, 8, keccak256("counter-root"), address(0xBEEF), 999, 456);
+            CommitmentAuthorizationLib.hashApplication(keccak256("application"), address(0xCAFE), 7, 456);
 
         _assertRoundTrip(structHash);
     }
 
-    function test_hashJobExpiredSettlement_recoversSigner() public view {
-        bytes32 structHash =
-            JobAuthorizationLib.hashJobExpiredSettlement(7, 10, 9, 8, keccak256("counter-root"), 999, 456);
+    function test_hashCommitmentSettlement_recoversSigner() public view {
+        bytes32 structHash = CommitmentAuthorizationLib.hashCommitmentSettlement(
+            7, 10, 9, 8, keccak256("counter-root"), address(0xBEEF), 999, 456
+        );
 
         _assertRoundTrip(structHash);
     }
 
-    function test_hashJobUnpublish_recoversSigner() public view {
-        bytes32 structHash = JobAuthorizationLib.hashJobUnpublish(7, address(0xBEEF), 123, 456);
+    function test_hashExpiredCommitmentSettlement_recoversSigner() public view {
+        bytes32 structHash = CommitmentAuthorizationLib.hashExpiredCommitmentSettlement(
+            7, 10, 9, 8, keccak256("counter-root"), 999, 456
+        );
+
+        _assertRoundTrip(structHash);
+    }
+
+    function test_hashCommitmentStop_recoversSigner() public view {
+        bytes32 structHash = CommitmentAuthorizationLib.hashCommitmentStop(7, address(0xBEEF), 123, 456);
 
         _assertRoundTrip(structHash);
     }

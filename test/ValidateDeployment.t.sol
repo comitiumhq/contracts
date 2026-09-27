@@ -4,7 +4,7 @@ pragma solidity 0.8.35;
 import {Test} from "forge-std/Test.sol";
 
 import {ValidateDeployment, ParsedDeploymentCatalog, DeploymentRoleMissing} from "../script/ValidateDeployment.s.sol";
-import {DeploymentJobCommitment} from "../script/Base.s.sol";
+import {DeploymentResponseCommitment} from "../script/Base.s.sol";
 
 contract ProtocolRolesMock {
     address[] private _operators;
@@ -48,11 +48,11 @@ contract ValidateDeploymentTest is Test {
 
         ParsedDeploymentCatalog memory catalog;
         catalog.orgRegistry.address_ = address(registry);
-        catalog.jobCommitments = new DeploymentJobCommitment[](2);
-        catalog.jobCommitments[0].address_ = address(firstCommitment);
-        catalog.jobCommitments[1].address_ = address(secondCommitment);
+        catalog.responseCommitments = new DeploymentResponseCommitment[](2);
+        catalog.responseCommitments[0].address_ = address(firstCommitment);
+        catalog.responseCommitments[1].address_ = address(secondCommitment);
 
-        vm.expectRevert(abi.encodeWithSelector(DeploymentRoleMissing.selector, "JobCommitment executor", executor));
+        vm.expectRevert(abi.encodeWithSelector(DeploymentRoleMissing.selector, "ResponseCommitment executor", executor));
         harness.assertConfiguredRoles(catalog);
     }
 }

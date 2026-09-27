@@ -15,21 +15,21 @@ struct SlashingTable {
     uint16 rate95; // 95-99%
 }
 
-/// @notice Fee and response deadline for one job publishing tier
+/// @notice Fee and response deadline for one commitment activation tier
 struct FeeTier {
     uint96 baseFee; // fixed non-refundable tier fee (USDC 6 decimals)
     uint16 feeBps; // stake-scaled fee in basis points
     uint8 deadlineDays; // response deadline in days
 }
 
-/// @notice Complete economic configuration for job operations
+/// @notice Complete economic configuration for commitment operations
 /// @dev FeeTier values are stored separately per config version.
-struct JobConfig {
+struct CommitmentConfig {
     uint96 minStake; // minimum org stake (USDC 6 decimals)
     uint8 tierCount; // number of active fee tiers for this version
     uint16 maxBatchSize; // operational response batch limit
-    uint32 maxUnpublishedDuration; // seconds, expired settlement window after unpublish
-    uint32 maxPublishedDuration; // seconds, expired settlement window after publication
+    uint32 maxStoppedDuration; // seconds, expired settlement window after stop
+    uint32 maxActiveDuration; // seconds, expired settlement window after activation
     SlashingTable harshSlashing; // expired settlement slashing rates
-    SlashingTable softSlashing; // normal close slashing rates
+    SlashingTable softSlashing; // normal settle slashing rates
 }

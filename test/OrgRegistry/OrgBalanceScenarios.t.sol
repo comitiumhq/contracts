@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {OrgJobBalance} from "../../src/interfaces/IJobFunds.sol";
+import {OrgCommitmentBalance} from "../../src/interfaces/ICommitmentFunds.sol";
 
 import {OrgTestBase} from "../shared/OrgTestBase.sol";
 
 contract OrgBalanceScenariosTest is OrgTestBase {
     uint256 orgId;
-    uint256 nextJobId = 1;
+    uint256 nextCommitmentId = 1;
 
     function setUp() public override {
         super.setUp();
         orgId = _createOrg(orgOwner1, "inv.com");
         vm.startPrank(contractOwner);
-        jobFunds.registerJobCommitment(address(this), 1);
-        jobFunds.setCurrentJobCommitment(address(this));
+        commitmentFunds.registerResponseCommitment(address(this), 1);
+        commitmentFunds.setCurrentResponseCommitment(address(this));
         vm.stopPrank();
     }
 
@@ -30,17 +30,17 @@ contract OrgBalanceScenariosTest is OrgTestBase {
         _fundAndDeposit(orgId, orgOwner1, deposit2);
 
         uint256 total = deposit1 + deposit2;
-        assertEq(jobFunds.totalAccountedBalance(), total);
+        assertEq(commitmentFunds.totalAccountedBalance(), total);
 
         withdraw1 = bound(withdraw1, 0, total);
         if (withdraw1 > 0) {
             vm.prank(orgOwner1);
-            jobFunds.withdraw(orgId, withdraw1);
+            commitmentFunds.withdraw(orgId, withdraw1);
         }
 
-        assertEq(jobFunds.totalAccountedBalance(), total - withdraw1);
+        assertEq(commitmentFunds.totalAccountedBalance(), total - withdraw1);
 
-        assertGe(usdc.balanceOf(address(jobFunds)), jobFunds.totalAccountedBalance());
+        assertGe(usdc.balanceOf(address(commitmentFunds)), commitmentFunds.totalAccountedBalance());
     }
 
     function testFuzz_totalAccountedBalance_tracksFundAndSettle(
@@ -57,19 +57,19 @@ contract OrgBalanceScenariosTest is OrgTestBase {
         // Need enough balance for stake + fee
         _fundAndDeposit(orgId, orgOwner1, deposit);
 
-        uint256 accountedBefore = jobFunds.totalAccountedBalance();
+        uint256 accountedBefore = commitmentFunds.totalAccountedBalance();
         assertEq(accountedBefore, deposit);
 
-        assertEq(_publishTestJob(address(this), orgId, orgOwner1, stake, fee), nextJobId);
+        assertEq(_activateTestCommitment(address(this), orgId, orgOwner1, stake, fee), nextCommitmentId);
 
-        assertEq(jobFunds.totalAccountedBalance(), deposit - fee);
+        assertEq(commitmentFunds.totalAccountedBalance(), deposit - fee);
 
-        jobFunds.settleJob(orgId, nextJobId, returnAmount);
+        commitmentFunds.settleCommitment(orgId, nextCommitmentId, returnAmount);
 
         uint256 slashed = stake - returnAmount;
-        assertEq(jobFunds.totalAccountedBalance(), deposit - fee - slashed);
+        assertEq(commitmentFunds.totalAccountedBalance(), deposit - fee - slashed);
 
-        assertGe(usdc.balanceOf(address(jobFunds)), jobFunds.totalAccountedBalance());
+        assertGe(usdc.balanceOf(address(commitmentFunds)), commitmentFunds.totalAccountedBalance());
     }
 
     function testFuzz_lockedNeverExceedsOperational(uint256 deposit, uint256 stake1, uint256 stake2, uint256 return1)
@@ -82,16 +82,16 @@ contract OrgBalanceScenariosTest is OrgTestBase {
 
         _fundAndDeposit(orgId, orgOwner1, deposit);
 
-        _publishTestJob(address(this), orgId, orgOwner1, stake1, 0);
+        _activateTestCommitment(address(this), orgId, orgOwner1, stake1, 0);
         _assertLockedLeqOperational();
 
-        _publishTestJob(address(this), orgId, orgOwner1, stake2, 0);
+        _activateTestCommitment(address(this), orgId, orgOwner1, stake2, 0);
         _assertLockedLeqOperational();
 
-        jobFunds.settleJob(orgId, 1, return1);
+        commitmentFunds.settleCommitment(orgId, 1, return1);
         _assertLockedLeqOperational();
 
-        jobFunds.settleJob(orgId, 2, stake2);
+        commitmentFunds.settleCommitment(orgId, 2, stake2);
         _assertLockedLeqOperational();
     }
 
@@ -104,62 +104,64 @@ contract OrgBalanceScenariosTest is OrgTestBase {
         _fundAndDeposit(orgId, orgOwner1, dep1);
         _fundAndDeposit(org2, orgOwner2, dep2);
 
-        assertEq(jobFunds.availableBalance(orgId), dep1);
-        assertEq(jobFunds.availableBalance(org2), dep2);
+        assertEq(commitmentFunds.availableBalance(orgId), dep1);
+        assertEq(commitmentFunds.availableBalance(org2), dep2);
 
         // Withdraw from org1 doesn't affect org2
         vm.prank(orgOwner1);
-        jobFunds.withdraw(orgId, dep1);
+        commitmentFunds.withdraw(orgId, dep1);
 
-        assertEq(jobFunds.availableBalance(orgId), 0);
-        assertEq(jobFunds.availableBalance(org2), dep2);
+        assertEq(commitmentFunds.availableBalance(orgId), 0);
+        assertEq(commitmentFunds.availableBalance(org2), dep2);
 
-        assertEq(jobFunds.totalAccountedBalance(), dep2);
+        assertEq(commitmentFunds.totalAccountedBalance(), dep2);
 
-        assertGe(usdc.balanceOf(address(jobFunds)), jobFunds.totalAccountedBalance());
+        assertGe(usdc.balanceOf(address(commitmentFunds)), commitmentFunds.totalAccountedBalance());
     }
 
-    function testFuzz_fullLifecycle(uint256 deposit, uint8 numJobs) public {
+    function testFuzz_fullLifecycle(uint256 deposit, uint8 numCommitments) public {
         deposit = bound(deposit, 1000, type(uint96).max / 4);
-        numJobs = uint8(bound(numJobs, 1, 5));
+        numCommitments = uint8(bound(numCommitments, 1, 5));
 
         _fundAndDeposit(orgId, orgOwner1, deposit);
 
-        uint256 stakePerJob = deposit / (numJobs * 2); // leave room
+        uint256 stakePerCommitment = deposit / (numCommitments * 2); // leave room
         uint256 totalLocked;
 
-        // Fund jobs
-        for (uint8 i = 0; i < numJobs; i++) {
-            assertEq(_publishTestJob(address(this), orgId, orgOwner1, stakePerJob, 0), nextJobId + i);
-            totalLocked += stakePerJob;
+        // Fund commitments
+        for (uint8 i = 0; i < numCommitments; i++) {
+            assertEq(
+                _activateTestCommitment(address(this), orgId, orgOwner1, stakePerCommitment, 0), nextCommitmentId + i
+            );
+            totalLocked += stakePerCommitment;
             _assertLockedLeqOperational();
         }
 
         // Settle all with half return
         uint256 totalSlashed;
-        for (uint8 i = 0; i < numJobs; i++) {
-            uint256 returnAmt = stakePerJob / 2;
-            jobFunds.settleJob(orgId, nextJobId + i, returnAmt);
-            totalSlashed += stakePerJob - returnAmt;
+        for (uint8 i = 0; i < numCommitments; i++) {
+            uint256 returnAmt = stakePerCommitment / 2;
+            commitmentFunds.settleCommitment(orgId, nextCommitmentId + i, returnAmt);
+            totalSlashed += stakePerCommitment - returnAmt;
             _assertLockedLeqOperational();
         }
 
-        OrgJobBalance memory org = jobFunds.jobBalance(orgId);
-        assertEq(org.stakedInJobs, 0);
+        OrgCommitmentBalance memory org = commitmentFunds.commitmentBalance(orgId);
+        assertEq(org.lockedInCommitments, 0);
         assertEq(org.available, deposit - totalSlashed);
 
-        uint256 remaining = jobFunds.availableBalance(orgId);
+        uint256 remaining = commitmentFunds.availableBalance(orgId);
         if (remaining > 0) {
             vm.prank(orgOwner1);
-            jobFunds.withdraw(orgId, remaining);
+            commitmentFunds.withdraw(orgId, remaining);
         }
 
-        assertEq(jobFunds.availableBalance(orgId), 0);
-        assertGe(usdc.balanceOf(address(jobFunds)), jobFunds.totalAccountedBalance());
+        assertEq(commitmentFunds.availableBalance(orgId), 0);
+        assertGe(usdc.balanceOf(address(commitmentFunds)), commitmentFunds.totalAccountedBalance());
     }
 
     function _assertLockedLeqOperational() internal view {
-        OrgJobBalance memory org = jobFunds.jobBalance(orgId);
-        assertLe(org.stakedInJobs, jobFunds.totalAccountedBalance(), "locked must be accounted");
+        OrgCommitmentBalance memory org = commitmentFunds.commitmentBalance(orgId);
+        assertLe(org.lockedInCommitments, commitmentFunds.totalAccountedBalance(), "locked must be accounted");
     }
 }
