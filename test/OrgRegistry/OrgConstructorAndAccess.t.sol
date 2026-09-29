@@ -11,12 +11,27 @@ import {OrgTestBase} from "../shared/OrgTestBase.sol";
 contract OrgConstructorAndAccessTest is OrgTestBase {
     function test_constructor_zeroOwner_reverts() public {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
-        new OrgRegistry(address(0), address(forwarder), operator);
+        new OrgRegistry(address(0), address(forwarder), operator, executor);
     }
 
     function test_constructor_zeroOperator_reverts() public {
         vm.expectRevert(Errors.ZeroAddress.selector);
-        new OrgRegistry(contractOwner, address(forwarder), address(0));
+        new OrgRegistry(contractOwner, address(forwarder), address(0), executor);
+    }
+
+    function test_constructor_zeroExecutor_reverts() public {
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        new OrgRegistry(contractOwner, address(forwarder), operator, address(0));
+    }
+
+    function test_constructor_operatorExecutorOverlap_reverts() public {
+        vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, operator));
+        new OrgRegistry(contractOwner, address(forwarder), operator, operator);
+    }
+
+    function test_constructor_trustedForwarderExecutor_reverts() public {
+        vm.expectRevert(abi.encodeWithSelector(Errors.ProtocolRoleConflict.selector, address(forwarder)));
+        new OrgRegistry(contractOwner, address(forwarder), operator, address(forwarder));
     }
 
     function testFuzz_nonOwner_cannotPause(address caller) public {
@@ -59,6 +74,6 @@ contract OrgConstructorAndAccessTest is OrgTestBase {
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", caller));
-        jobFunds.registerJobCommitment(makeAddr("fake"), 1);
+        commitmentFunds.registerResponseCommitment(makeAddr("fake"), 1);
     }
 }

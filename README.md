@@ -8,23 +8,13 @@ The onchain accountability layer for Comitium.
 > [!NOTE]
 > The current deployment is a development release on Base Sepolia. No Base mainnet deployment has been published.
 
-## Mechanism design
-
-Public hiring has a credibility problem: organizations can publish roles with little accountability for following through, while automated tools make it cheap to submit applications at scale.
-
-Comitium uses a two-sided commitment mechanism.
-
-Organizations choose a USDC commitment above the protocol minimum and an application-review window. Larger commitments receive greater visibility in the default job ordering. The commitment is fully refundable when every application is answered on time; otherwise a response-rate-based share is burned.
-
-Applicants temporarily lock a small amount for each application. It becomes fully withdrawable after the organization responds or the review deadline passes, so applying at scale ties up proportionally more capital. Applicant commitments are not fees and never affect candidate ranking.
-
 ## Protocol
 
 | Component | Responsibility |
 | --- | --- |
 | [`OrgRegistry`](./src/OrgRegistry.sol) | Organization identity, administration, treasury authority, and public metadata |
-| [`JobFunds`](./src/JobFunds.sol) | Organization USDC balances, job locks, fees, and settlement routing |
-| [`JobCommitment`](./src/JobCommitment.sol) | Public job and application commitments, response evidence, applicant withdrawals, and settlement |
+| [`CommitmentFunds`](./src/CommitmentFunds.sol) | Organization USDC balances, commitment locks, fees, and settlement accounting |
+| [`ResponseCommitment`](./src/ResponseCommitment.sol) | Optional response commitment lifecycle and response evidence |
 | `ERC2771Forwarder` | Sponsored transactions while preserving the original actor |
 
 ## Deployments

@@ -6,33 +6,29 @@ import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import {JobCommitment} from "../../src/JobCommitment.sol";
+import {ResponseCommitment} from "../../src/ResponseCommitment.sol";
 import {OrgRegistry} from "../../src/OrgRegistry.sol";
-import {JobFunds} from "../../src/JobFunds.sol";
-import {OrgJobBalance} from "../../src/interfaces/IJobFunds.sol";
-import {JobView, ApplicationView} from "../../src/interfaces/IJobCommitment.sol";
-import {JobStatus} from "../../src/types/JobTypes.sol";
+import {CommitmentFunds} from "../../src/CommitmentFunds.sol";
+import {OrgCommitmentBalance} from "../../src/interfaces/ICommitmentFunds.sol";
+import {CommitmentView, ApplicationView} from "../../src/interfaces/IResponseCommitment.sol";
+import {CommitmentStatus} from "../../src/types/CommitmentTypes.sol";
 
 import {IOrgRegistry} from "../../src/interfaces/IOrgRegistry.sol";
 
 import {USDC} from "../mocks/USDC.sol";
 import {Eip3009TestHelper} from "./Eip3009TestHelper.sol";
 import {SLASH_BURN_ADDRESS as PROTOCOL_SLASH_BURN_ADDRESS} from "../../src/Constants.sol";
-import {FeeTier, JobConfig, SlashingTable} from "../../src/types/ConfigTypes.sol";
-import {JobAuthorizationLib} from "../../src/libraries/JobAuthorizationLib.sol";
+import {FeeTier, CommitmentConfig, SlashingTable} from "../../src/types/ConfigTypes.sol";
+import {CommitmentAuthorizationLib} from "../../src/libraries/CommitmentAuthorizationLib.sol";
 import {OrgAuthorizationLib} from "../../src/libraries/OrgAuthorizationLib.sol";
 
 // ============ Test Constants ============
-// Default values matching constructor config — tests can't read storage configs easily in setup
 uint256 constant TEST_MIN_STAKE = 50_000_000;
 uint96 constant TEST_TIER_0_BASE_FEE = 25_000_000;
 uint96 constant TEST_TIER_1_BASE_FEE = 35_000_000;
 uint96 constant TEST_TIER_2_BASE_FEE = 50_000_000;
-uint96 constant TEST_APPLICANT_STAKE = 3_000_000;
-uint96 constant TEST_APPLICANT_STAKE_LOWER = 1_000_000;
-uint96 constant TEST_APPLICANT_STAKE_UPPER = 10_000_000;
-uint256 constant TEST_MAX_UNPUBLISHED_DURATION = 90 days;
-uint256 constant TEST_MAX_PUBLISHED_DURATION = 365 days;
+uint256 constant TEST_MAX_STOPPED_DURATION = 90 days;
+uint256 constant TEST_MAX_ACTIVE_DURATION = 365 days;
 uint256 constant TEST_FEE_TIER_0 = 150;
 uint256 constant TEST_FEE_TIER_1 = 250;
 uint256 constant TEST_FEE_TIER_2 = 350;
@@ -40,15 +36,15 @@ uint8 constant TEST_DEADLINE_DAYS_TIER_0 = 3;
 uint8 constant TEST_DEADLINE_DAYS_TIER_1 = 7;
 uint8 constant TEST_DEADLINE_DAYS_TIER_2 = 14;
 
-/// @title JobCommitmentTestBase
-/// @notice Base contract for all JobCommitment tests with common setup and helpers
-abstract contract JobCommitmentTestBase is Eip3009TestHelper {
+/// @title ResponseCommitmentTestBase
+/// @notice Base contract for all ResponseCommitment tests with common setup and helpers
+abstract contract ResponseCommitmentTestBase is Eip3009TestHelper {
     using MessageHashUtils for bytes32;
 
     // ============ Contracts ============
-    JobCommitment public jobCommitment;
+    ResponseCommitment public responseCommitment;
     OrgRegistry public orgRegistry;
-    JobFunds public jobFunds;
+    CommitmentFunds public commitmentFunds;
     ERC2771Forwarder public forwarder;
     USDC public usdc;
 
@@ -68,52 +64,50 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
 
     // ============ Constants ============
     uint256 public constant EMPLOYER_STAKE = 500_000_000; // 500 USDC
-    uint256 public constant APPLICANT_STAKE = 3_000_000; // 3 USDC
-    uint96 public constant APPLICANT_STAKE_96 = 3_000_000; // typed mirror for signature helpers
     uint256 public constant DEFAULT_ORG_ID = 1;
     uint256 public constant ORG_OPERATIONAL_BALANCE = 100_000_000_000; // 100,000 USDC
     uint8 public constant DEFAULT_RESPONSE_DEADLINE_DAYS = 3; // tier 0
+    bytes32 public constant DEFAULT_POSTING_REF = keccak256("comitium:test:posting");
     address public constant SLASH_BURN_ADDRESS = PROTOCOL_SLASH_BURN_ADDRESS;
 
     // ============ Nonces ============
     uint256 public applicationNonce;
-    uint256 public closeNonce;
+    uint256 public settleNonce;
     uint256 public expiredSettlementNonce;
     uint256 public creationNonce;
     uint256 public domainVerificationNonce;
     uint256 public orgDomainUpdateNonce;
-    uint256 public unpublishNonce;
-    uint256 public contentURINonce;
+    uint256 public stopNonce;
 
-    uint16 internal constant NONCE_SCOPE_JOB_PUBLISH = JobAuthorizationLib.NONCE_SCOPE_JOB_PUBLISH;
-    uint16 internal constant NONCE_SCOPE_JOB_CLOSE = JobAuthorizationLib.NONCE_SCOPE_JOB_CLOSE;
+    uint16 internal constant NONCE_SCOPE_COMMITMENT_ACTIVATION =
+        CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_ACTIVATION;
+    uint16 internal constant NONCE_SCOPE_COMMITMENT_SETTLEMENT =
+        CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_SETTLEMENT;
     uint16 internal constant NONCE_SCOPE_DOMAIN_VERIFICATION = OrgAuthorizationLib.NONCE_SCOPE_DOMAIN_VERIFICATION;
-    uint16 internal constant NONCE_SCOPE_JOB_UNPUBLISH = JobAuthorizationLib.NONCE_SCOPE_JOB_UNPUBLISH;
-    uint16 internal constant NONCE_SCOPE_JOB_CONTENT_URI_UPDATE =
-        JobAuthorizationLib.NONCE_SCOPE_JOB_CONTENT_URI_UPDATE;
+    uint16 internal constant NONCE_SCOPE_COMMITMENT_STOP = CommitmentAuthorizationLib.NONCE_SCOPE_COMMITMENT_STOP;
     uint16 internal constant NONCE_SCOPE_ORG_DOMAIN_UPDATE = OrgAuthorizationLib.NONCE_SCOPE_ORG_DOMAIN_UPDATE;
-    uint16 internal constant NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT =
-        JobAuthorizationLib.NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT;
+    uint16 internal constant NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT =
+        CommitmentAuthorizationLib.NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT;
 
     // ============ EIP-712 ============
-    bytes32 public constant APPLICATION_TYPEHASH = JobAuthorizationLib.APPLICATION_TYPEHASH;
-    bytes32 public constant JOB_CLOSE_TYPEHASH = JobAuthorizationLib.JOB_CLOSE_TYPEHASH;
-    bytes32 public constant JOB_EXPIRED_SETTLEMENT_TYPEHASH = JobAuthorizationLib.JOB_EXPIRED_SETTLEMENT_TYPEHASH;
-    bytes32 public constant JOB_PUBLISH_TYPEHASH = JobAuthorizationLib.JOB_PUBLISH_TYPEHASH;
-    bytes32 public constant JOB_UNPUBLISH_TYPEHASH = JobAuthorizationLib.JOB_UNPUBLISH_TYPEHASH;
-    bytes32 public constant JOB_CONTENT_URI_UPDATE_TYPEHASH = JobAuthorizationLib.JOB_CONTENT_URI_UPDATE_TYPEHASH;
+    bytes32 public constant APPLICATION_TYPEHASH = CommitmentAuthorizationLib.APPLICATION_TYPEHASH;
+    bytes32 public constant COMMITMENT_SETTLEMENT_TYPEHASH = CommitmentAuthorizationLib.COMMITMENT_SETTLEMENT_TYPEHASH;
+    bytes32 public constant EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH =
+        CommitmentAuthorizationLib.EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH;
+    bytes32 public constant COMMITMENT_ACTIVATION_TYPEHASH = CommitmentAuthorizationLib.COMMITMENT_ACTIVATION_TYPEHASH;
+    bytes32 public constant COMMITMENT_STOP_TYPEHASH = CommitmentAuthorizationLib.COMMITMENT_STOP_TYPEHASH;
     bytes32 public constant DOMAIN_VERIFICATION_TYPEHASH = OrgAuthorizationLib.DOMAIN_VERIFICATION_TYPEHASH;
     bytes32 public constant ORG_DOMAIN_UPDATE_TYPEHASH = OrgAuthorizationLib.ORG_DOMAIN_UPDATE_TYPEHASH;
 
     // ============ Config Helpers ============
 
-    function _defaultJobConfig() internal pure returns (JobConfig memory) {
-        return JobConfig({
+    function _defaultCommitmentConfig() internal pure returns (CommitmentConfig memory) {
+        return CommitmentConfig({
             minStake: 50_000_000,
             tierCount: 3,
             maxBatchSize: 50,
-            maxUnpublishedDuration: uint32(90 days),
-            maxPublishedDuration: uint32(365 days),
+            maxStoppedDuration: uint32(90 days),
+            maxActiveDuration: uint32(365 days),
             harshSlashing: SlashingTable({
                 zeroResponseRate: 10000,
                 below50Rate: 5000,
@@ -155,45 +149,34 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         usdc = new USDC();
         forwarder = new ERC2771Forwarder("ComitiumForwarder");
 
-        // 1. Deploy OrgRegistry
-        orgRegistry = new OrgRegistry(owner, address(forwarder), operator);
+        orgRegistry = new OrgRegistry(owner, address(forwarder), operator, executor);
 
-        // 2. Deploy JobFunds
-        jobFunds = new JobFunds(
+        commitmentFunds = new CommitmentFunds(
             IERC20(address(usdc)), IOrgRegistry(address(orgRegistry)), feeRecipient, owner, address(forwarder)
         );
 
-        // 3. Deploy JobCommitment with funding jobFunds
-        jobCommitment = new JobCommitment(
-            IERC20(address(usdc)),
-            jobFunds,
+        responseCommitment = new ResponseCommitment(
+            commitmentFunds,
             owner,
             address(forwarder),
             operator,
             executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
+            _defaultCommitmentConfig(),
+            _defaultFeeTiers()
         );
 
-        // 4. Authorize JobCommitment in funding jobFunds
-        uint32 commitmentVersion = jobCommitment.commitmentVersion();
+        uint32 commitmentVersion = responseCommitment.commitmentVersion();
         vm.prank(owner);
-        jobFunds.registerJobCommitment(address(jobCommitment), commitmentVersion);
+        commitmentFunds.registerResponseCommitment(address(responseCommitment), commitmentVersion);
 
         vm.prank(owner);
-        jobFunds.setCurrentJobCommitment(address(jobCommitment));
+        commitmentFunds.setCurrentResponseCommitment(address(responseCommitment));
 
-        // 5. Create default org for employer
         _createOrgForEmployer(employer, "test.com", DEFAULT_ORG_ID);
 
-        // 6. Fund org job balance
         _fundAndDepositWithAuthorization(
-            jobFunds, address(usdc), employerPrivateKey, DEFAULT_ORG_ID, ORG_OPERATIONAL_BALANCE
+            commitmentFunds, address(usdc), employerPrivateKey, DEFAULT_ORG_ID, ORG_OPERATIONAL_BALANCE
         );
-
-        _fundApplicant(applicant1);
-        _fundApplicant(applicant2);
     }
 
     // ============ Organization Helpers ============
@@ -209,8 +192,8 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         bytes memory sig = abi.encodePacked(r, s, v);
 
-        vm.prank(employerAddr);
-        orgRegistry.createOrg(_domainHash(domain), keyNonce, expiry, sig);
+        vm.prank(executor);
+        orgRegistry.createOrg(employerAddr, _domainHash(domain), keyNonce, expiry, sig);
     }
 
     function _domainHash(string memory domain) internal pure returns (bytes32) {
@@ -219,22 +202,10 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
 
     /// @notice Fund an org with operational balance
     function _fundOrg(uint256 orgId, uint256 treasuryPrivateKey, uint256 amount) internal {
-        _fundAndDepositWithAuthorization(jobFunds, address(usdc), treasuryPrivateKey, orgId, amount);
+        _fundAndDepositWithAuthorization(commitmentFunds, address(usdc), treasuryPrivateKey, orgId, amount);
     }
 
     // ============ Funding Helpers ============
-
-    /// @notice Fund an applicant with 100 USDC and approve JobCommitment
-    function _fundApplicant(address account) internal {
-        _fundApplicantWithAmount(account, 100_000_000); // 100 USDC
-    }
-
-    /// @notice Fund an applicant with specific amount and approve JobCommitment
-    function _fundApplicantWithAmount(address account, uint256 amount) internal {
-        usdc.mint(account, amount);
-        vm.prank(account);
-        usdc.approve(address(jobCommitment), type(uint256).max);
-    }
 
     function _assertSlashBurned(
         uint256 burnAddressBefore,
@@ -246,74 +217,86 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         assertEq(usdc.balanceOf(feeRecipient), feeRecipientBefore, "Fee recipient should not receive slash");
     }
 
-    // ============ Job Helpers ============
+    // ============ Commitment Helpers ============
 
-    /// @notice Create a job with default stake and specified fee tier
-    function _publishJob(uint8 feeTier) internal returns (uint256 jobId) {
-        return _publishJobWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, "QmTest123");
+    /// @notice Create a commitment with default stake and specified fee tier
+    function _activateCommitment(uint8 feeTier) internal returns (uint256 commitmentId) {
+        return _activateCommitmentWithParams(DEFAULT_ORG_ID, EMPLOYER_STAKE, feeTier, DEFAULT_POSTING_REF);
     }
 
-    /// @notice Create a job with all parameters
-    function _publishJobWithParams(uint256 orgId, uint256 stake, uint8 feeTier, string memory contentURI)
+    /// @notice Create a commitment with all parameters
+    function _activateCommitmentWithParams(uint256 orgId, uint256 stake, uint8 feeTier, bytes32 postingRef)
         internal
-        returns (uint256 jobId)
+        returns (uint256 commitmentId)
     {
-        uint256 keyNonce = _nextJobPublishKeyNonce();
+        uint256 keyNonce = _nextCommitmentActivationKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(orgId, stake, feeTier, contentURI, employer, keyNonce, expiry);
-        return _executeJobPublish(employer, orgId, stake, feeTier, contentURI, keyNonce, expiry, signature);
+        bytes memory signature =
+            _signCommitmentActivation(orgId, stake, feeTier, postingRef, employer, keyNonce, expiry);
+        return _executeCommitmentActivation(employer, orgId, stake, feeTier, postingRef, keyNonce, expiry, signature);
     }
 
-    /// @notice Create a job with custom employer
-    function _publishJobAs(address employerAddr, uint256 orgId, uint256 stake, uint8 feeTier)
+    /// @notice Create a commitment with custom employer
+    function _activateCommitmentAs(address employerAddr, uint256 orgId, uint256 stake, uint8 feeTier)
         internal
-        returns (uint256 jobId)
+        returns (uint256 commitmentId)
     {
-        uint256 keyNonce = _nextJobPublishKeyNonce();
+        uint256 keyNonce = _nextCommitmentActivationKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobPublish(orgId, stake, feeTier, "QmTest123", employerAddr, keyNonce, expiry);
-        return _executeJobPublish(employerAddr, orgId, stake, feeTier, "QmTest123", keyNonce, expiry, signature);
+        bytes memory signature =
+            _signCommitmentActivation(orgId, stake, feeTier, DEFAULT_POSTING_REF, employerAddr, keyNonce, expiry);
+        return _executeCommitmentActivation(
+            employerAddr, orgId, stake, feeTier, DEFAULT_POSTING_REF, keyNonce, expiry, signature
+        );
     }
 
-    function _executeJobPublish(
+    function _executeCommitmentActivation(
         address creator,
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
-        string memory contentURI,
+        bytes32 postingRef,
         uint256 keyNonce,
         uint256 expiry,
         bytes memory signature
-    ) internal returns (uint256 jobId) {
-        return _executeJobPublishWithFee(
-            creator, orgId, stake, feeTier, _jobPublishFee(stake, feeTier), contentURI, keyNonce, expiry, signature
+    ) internal returns (uint256 commitmentId) {
+        return _executeCommitmentActivationWithFee(
+            creator,
+            orgId,
+            stake,
+            feeTier,
+            _commitmentActivateFee(stake, feeTier),
+            postingRef,
+            keyNonce,
+            expiry,
+            signature
         );
     }
 
-    function _executeJobPublishWithFee(
+    function _executeCommitmentActivationWithFee(
         address creator,
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
         uint256 expectedFeeAmount,
-        string memory contentURI,
+        bytes32 postingRef,
         uint256 keyNonce,
         uint256 expiry,
         bytes memory signature
-    ) internal returns (uint256 jobId) {
+    ) internal returns (uint256 commitmentId) {
         vm.prank(creator);
-        return jobFunds.publishJob(
-            address(jobCommitment),
+        return commitmentFunds.activateCommitment(
+            address(responseCommitment),
             orgId,
             stake,
             expectedFeeAmount,
             feeRecipient,
-            abi.encode(feeTier, contentURI, keyNonce, expiry, signature)
+            abi.encode(feeTier, postingRef, keyNonce, expiry, signature)
         );
     }
 
-    function _jobPublishFee(uint256 stake, uint8 feeTier) internal view returns (uint256 fee) {
-        FeeTier memory tier = jobCommitment.feeTier(jobCommitment.currentConfigVersion(), feeTier);
+    function _commitmentActivateFee(uint256 stake, uint8 feeTier) internal view returns (uint256 fee) {
+        FeeTier memory tier = responseCommitment.feeTier(responseCommitment.currentConfigVersion(), feeTier);
         return tier.baseFee + ((stake * tier.feeBps) / 10_000);
     }
 
@@ -325,65 +308,41 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         return keccak256(abi.encodePacked("app", applicantAddr, applicationNonce));
     }
 
-    /// @notice Apply with default stake; jobId is ignored because application signatures bind applicationId, not jobId.
-    function _applyToJob(uint256 _ignoredJobId, address applicantAddr) internal returns (bytes32 applicationId) {
-        _ignoredJobId;
-        return _applyToJobWithStake(applicantAddr, APPLICANT_STAKE);
+    function _submitApplication(address applicantAddr) internal returns (bytes32 applicationId) {
+        return _submitApplicationWithParams(applicantAddr, DEFAULT_RESPONSE_DEADLINE_DAYS);
     }
 
-    /// @notice Apply with default stake.
-    function _applyToJob(address applicantAddr) internal returns (bytes32 applicationId) {
-        return _applyToJobWithStake(applicantAddr, APPLICANT_STAKE);
-    }
-
-    /// @notice Apply with custom stake; jobId is ignored because application signatures bind applicationId, not jobId.
-    function _applyToJobWithStake(uint256 _ignoredJobId, address applicantAddr, uint256 stake)
-        internal
-        returns (bytes32 applicationId)
-    {
-        _ignoredJobId;
-        return _applyToJobWithStake(applicantAddr, stake);
-    }
-
-    /// @notice Apply with custom stake using the default response deadline.
-    function _applyToJobWithStake(address applicantAddr, uint256 stake) internal returns (bytes32 applicationId) {
-        return _applyToJobWithParams(applicantAddr, _toUint96(stake), DEFAULT_RESPONSE_DEADLINE_DAYS);
-    }
-
-    /// @notice Apply with full parameter control
-    function _applyToJobWithParams(address applicantAddr, uint96 stake, uint8 responseDeadlineDays)
+    /// @notice Submit an application with a custom response deadline.
+    function _submitApplicationWithParams(address applicantAddr, uint8 responseDeadlineDays)
         internal
         returns (bytes32 applicationId)
     {
         applicationId = _generateApplicationId(applicantAddr);
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signApplication(applicationId, applicantAddr, stake, responseDeadlineDays, expiry);
+        bytes memory signature = _signApplication(applicationId, applicantAddr, responseDeadlineDays, expiry);
 
         vm.prank(applicantAddr);
-        jobCommitment.submitApplication(applicationId, stake, responseDeadlineDays, expiry, signature);
+        responseCommitment.submitApplication(applicationId, responseDeadlineDays, expiry, signature);
     }
 
     // ============ Signature Helpers ============
 
     /// @notice Sign an application with the operator's private key
-    function _signApplication(
-        bytes32 applicationId,
-        address applicantAddr,
-        uint96 stake,
-        uint8 responseDeadlineDays,
-        uint256 expiry
-    ) internal view returns (bytes memory) {
-        bytes32 structHash = keccak256(
-            abi.encode(APPLICATION_TYPEHASH, applicationId, applicantAddr, stake, responseDeadlineDays, expiry)
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
+    function _signApplication(bytes32 applicationId, address applicantAddr, uint8 responseDeadlineDays, uint256 expiry)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 structHash =
+            keccak256(abi.encode(APPLICATION_TYPEHASH, applicationId, applicantAddr, responseDeadlineDays, expiry));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", responseCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         return abi.encodePacked(r, s, v);
     }
 
-    /// @notice Sign a job close for the default employer with the operator's private key.
-    function _signJobClose(
-        uint256 jobId,
+    /// @notice Sign a commitment settle for the default employer with the operator's private key.
+    function _signCommitmentSettlement(
+        uint256 commitmentId,
         uint32 totalApplications,
         uint32 respondedApplications,
         uint32 onTimeResponses,
@@ -391,8 +350,8 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         uint256 keyNonce,
         uint256 expiry
     ) internal view returns (bytes memory) {
-        return _signJobClose(
-            jobId,
+        return _signCommitmentSettlement(
+            commitmentId,
             totalApplications,
             respondedApplications,
             onTimeResponses,
@@ -403,38 +362,38 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         );
     }
 
-    /// @notice Sign a job close for a specific closer with the operator's private key.
-    function _signJobClose(
-        uint256 jobId,
+    /// @notice Sign a commitment settle for a specific settler with the operator's private key.
+    function _signCommitmentSettlement(
+        uint256 commitmentId,
         uint32 totalApplications,
         uint32 respondedApplications,
         uint32 onTimeResponses,
         bytes32 counterSnapshotRoot,
-        address closer,
+        address settler,
         uint256 keyNonce,
         uint256 expiry
     ) internal view returns (bytes memory) {
         bytes32 structHash = keccak256(
             abi.encode(
-                JOB_CLOSE_TYPEHASH,
-                jobId,
+                COMMITMENT_SETTLEMENT_TYPEHASH,
+                commitmentId,
                 totalApplications,
                 respondedApplications,
                 onTimeResponses,
                 counterSnapshotRoot,
-                closer,
+                settler,
                 keyNonce,
                 expiry
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", responseCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         return abi.encodePacked(r, s, v);
     }
 
     /// @notice Sign an expired settlement with the operator's private key.
-    function _signJobExpiredSettlement(
-        uint256 jobId,
+    function _signExpiredCommitmentSettlement(
+        uint256 commitmentId,
         uint32 totalApplications,
         uint32 respondedApplications,
         uint32 onTimeResponses,
@@ -444,8 +403,8 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     ) internal view returns (bytes memory) {
         bytes32 structHash = keccak256(
             abi.encode(
-                JOB_EXPIRED_SETTLEMENT_TYPEHASH,
-                jobId,
+                EXPIRED_COMMITMENT_SETTLEMENT_TYPEHASH,
+                commitmentId,
                 totalApplications,
                 respondedApplications,
                 onTimeResponses,
@@ -454,63 +413,48 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
                 expiry
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", responseCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
 
         return abi.encodePacked(r, s, v);
     }
 
-    /// @notice Sign a job creation with the operator's private key
-    function _signJobPublish(
+    /// @notice Sign a commitment creation with the operator's private key
+    function _signCommitmentActivation(
         uint256 orgId,
         uint256 stake,
         uint8 feeTier,
-        string memory contentURI,
+        bytes32 postingRef,
         address creator,
         uint256 keyNonce,
         uint256 expiry
     ) internal view returns (bytes memory) {
         bytes32 structHash = keccak256(
             abi.encode(
-                JOB_PUBLISH_TYPEHASH,
+                COMMITMENT_ACTIVATION_TYPEHASH,
                 orgId,
                 stake,
                 feeTier,
-                keccak256(bytes(contentURI)),
+                postingRef,
                 creator,
-                jobCommitment.currentConfigVersion(),
+                responseCommitment.currentConfigVersion(),
                 keyNonce,
                 expiry
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", responseCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         return abi.encodePacked(r, s, v);
     }
 
-    /// @notice Sign a job unpublish with the operator's private key.
-    function _signJobUnpublish(uint256 jobId, address unpublisher, uint256 keyNonce, uint256 expiry)
+    /// @notice Sign a commitment stop with the operator's private key.
+    function _signCommitmentStop(uint256 commitmentId, address stopper, uint256 keyNonce, uint256 expiry)
         internal
         view
         returns (bytes memory)
     {
-        bytes32 structHash = keccak256(abi.encode(JOB_UNPUBLISH_TYPEHASH, jobId, unpublisher, keyNonce, expiry));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
-        return abi.encodePacked(r, s, v);
-    }
-
-    function _signJobContentURIUpdate(
-        uint256 jobId,
-        string memory contentURI,
-        address updater,
-        uint256 keyNonce,
-        uint256 expiry
-    ) internal view returns (bytes memory) {
-        bytes32 structHash = keccak256(
-            abi.encode(JOB_CONTENT_URI_UPDATE_TYPEHASH, jobId, keccak256(bytes(contentURI)), updater, keyNonce, expiry)
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", jobCommitment.DOMAIN_SEPARATOR(), structHash));
+        bytes32 structHash = keccak256(abi.encode(COMMITMENT_STOP_TYPEHASH, commitmentId, stopper, keyNonce, expiry));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", responseCommitment.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(operatorPrivateKey, digest);
         return abi.encodePacked(r, s, v);
     }
@@ -544,13 +488,12 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     function _respondToApplicationAs(bytes32 applicationId, address executor) internal {
         bytes32 responseId = _generateResponseId(applicationId);
         vm.prank(executor);
-        jobCommitment.recordApplicationResponse(applicationId, responseId);
+        responseCommitment.recordApplicationResponse(applicationId, responseId);
     }
 
     /// @notice Record an application response after warping past deadline
     function _respondToApplicationLate(bytes32 applicationId) internal {
-        ApplicationView memory app = jobCommitment.application(applicationId);
-        // Warp past the response deadline
+        ApplicationView memory app = responseCommitment.application(applicationId);
         vm.warp(app.responseDeadline + 1);
         _respondToApplication(applicationId);
     }
@@ -568,53 +511,57 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         }
 
         vm.prank(executor);
-        jobCommitment.recordApplicationResponses(applicationIds, responseIds);
+        responseCommitment.recordApplicationResponses(applicationIds, responseIds);
     }
 
-    // ============ Job Lifecycle Helpers ============
+    // ============ Commitment Lifecycle Helpers ============
 
-    /// @notice Unpublish a job.
-    function _unpublishJob(uint256 jobId) internal {
-        _unpublishJobAs(jobId, employer);
+    /// @notice Stop a commitment.
+    function _stopCommitment(uint256 commitmentId) internal {
+        _stopCommitmentAs(commitmentId, employer);
     }
 
-    /// @notice Unpublish a job as a specific caller.
-    function _unpublishJobAs(uint256 jobId, address unpublisher) internal {
-        uint256 keyNonce = _nextJobUnpublishKeyNonce();
+    /// @notice Stop a commitment as a specific caller.
+    function _stopCommitmentAs(uint256 commitmentId, address stopper) internal {
+        uint256 keyNonce = _nextCommitmentStopKeyNonce();
         uint256 expiry = block.timestamp + 1 hours;
-        bytes memory signature = _signJobUnpublish(jobId, unpublisher, keyNonce, expiry);
-        vm.prank(unpublisher);
-        jobCommitment.unpublishJob(jobId, keyNonce, expiry, signature);
+        bytes memory signature = _signCommitmentStop(commitmentId, stopper, keyNonce, expiry);
+        vm.prank(stopper);
+        responseCommitment.stopCommitment(commitmentId, keyNonce, expiry, signature);
     }
 
-    /// @notice Close a job with no applications.
-    function _closeJob(uint256 jobId) internal {
-        _closeJob(jobId, 0, 0, 0);
+    /// @notice Settle a commitment with zero counters.
+    function _settleCommitment(uint256 commitmentId) internal {
+        _settleCommitment(commitmentId, 0, 0, 0);
     }
 
-    /// @notice Close a job with operator-attested counters.
-    function _closeJob(uint256 jobId, uint32 total, uint32 responded, uint32 onTime) internal {
-        uint256 keyNonce = _nextJobCloseKeyNonce();
-        uint256 expiry = block.timestamp + 1 hours;
+    /// @notice Settle a commitment with operator-attested counters.
+    function _settleCommitment(uint256 commitmentId, uint32 total, uint32 responded, uint32 onTime) internal {
+        uint256 keyNonce = _nextCommitmentSettleKeyNonce();
+        // Read the current time after helpers that may have warped the test clock.
+        uint256 expiry = vm.getBlockTimestamp() + 1 hours;
         bytes32 counterSnapshotRoot = _counterSnapshotRoot(total);
-        bytes memory signature = _signJobClose(jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry);
+        bytes memory signature =
+            _signCommitmentSettlement(commitmentId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry);
         vm.prank(employer);
-        jobCommitment.closeJob(jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature);
+        responseCommitment.settleCommitment(
+            commitmentId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature
+        );
     }
 
-    /// @notice Settle an expired job with no applications (convenience)
-    function _settleExpiredJob(uint256 jobId) internal {
-        _settleExpiredJob(jobId, 0, 0, 0);
+    /// @notice Settle an expired commitment with zero counters.
+    function _settleExpiredCommitment(uint256 commitmentId) internal {
+        _settleExpiredCommitment(commitmentId, 0, 0, 0);
     }
 
-    /// @notice Settle an expired job with operator-attested counters.
-    function _settleExpiredJob(uint256 jobId, uint32 total, uint32 responded, uint32 onTime) internal {
-        _settleExpiredJobAs(jobId, total, responded, onTime, _counterSnapshotRoot(total), executor);
+    /// @notice Settle an expired commitment with operator-attested counters.
+    function _settleExpiredCommitment(uint256 commitmentId, uint32 total, uint32 responded, uint32 onTime) internal {
+        _settleExpiredCommitmentAs(commitmentId, total, responded, onTime, _counterSnapshotRoot(total), executor);
     }
 
-    /// @notice Settle an expired job as a specific caller.
-    function _settleExpiredJobAs(
-        uint256 jobId,
+    /// @notice Settle an expired commitment as a specific caller.
+    function _settleExpiredCommitmentAs(
+        uint256 commitmentId,
         uint32 total,
         uint32 responded,
         uint32 onTime,
@@ -622,16 +569,16 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         address caller
     ) internal {
         (uint256 keyNonce, uint256 expiry, bytes memory signature) =
-            _expiredSettlementAuthorization(jobId, total, responded, onTime, counterSnapshotRoot);
+            _expiredSettlementAuthorization(commitmentId, total, responded, onTime, counterSnapshotRoot);
 
         vm.prank(caller);
-        jobCommitment.settleExpiredJob(
-            jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature
+        responseCommitment.settleExpiredCommitment(
+            commitmentId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature
         );
     }
 
     function _expiredSettlementAuthorization(
-        uint256 jobId,
+        uint256 commitmentId,
         uint32 total,
         uint32 responded,
         uint32 onTime,
@@ -639,12 +586,14 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
     ) internal returns (uint256 keyNonce, uint256 expiry, bytes memory signature) {
         keyNonce = _nextExpiredSettlementKeyNonce();
         expiry = vm.getBlockTimestamp() + 1 hours;
-        signature = _signJobExpiredSettlement(jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry);
+        signature = _signExpiredCommitmentSettlement(
+            commitmentId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry
+        );
     }
 
     function _expectExpiredSettlementRevert(
         bytes memory expectedRevert,
-        uint256 jobId,
+        uint256 commitmentId,
         uint32 total,
         uint32 responded,
         uint32 onTime,
@@ -652,12 +601,12 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         address caller
     ) internal {
         (uint256 keyNonce, uint256 expiry, bytes memory signature) =
-            _expiredSettlementAuthorization(jobId, total, responded, onTime, counterSnapshotRoot);
+            _expiredSettlementAuthorization(commitmentId, total, responded, onTime, counterSnapshotRoot);
 
         vm.prank(caller);
         vm.expectRevert(expectedRevert);
-        jobCommitment.settleExpiredJob(
-            jobId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature
+        responseCommitment.settleExpiredCommitment(
+            commitmentId, total, responded, onTime, counterSnapshotRoot, keyNonce, expiry, signature
         );
     }
 
@@ -668,52 +617,50 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         return keccak256(abi.encode("test-counter-snapshot-root", totalApplications));
     }
 
-    // ============ Withdrawal Helpers ============
-
-    /// @notice Withdraw applicant stake through the single-application withdrawStake entrypoint.
-    function _withdrawStake(bytes32 applicationId, address applicantAddr) internal {
-        vm.prank(applicantAddr);
-        jobCommitment.withdrawStake(applicationId);
+    function _expiredStoppedCommitment() internal returns (uint256 commitmentId) {
+        commitmentId = _activateCommitment(0);
+        _stopCommitment(commitmentId);
+        _warpToExpiration(commitmentId);
     }
 
     // ============ Time Helpers ============
 
-    /// @notice Warp to job expiration time
-    function _warpToExpiration(uint256 jobId) internal {
-        JobView memory job = jobCommitment.job(jobId);
-        vm.warp(job.unpublishedAt + TEST_MAX_UNPUBLISHED_DURATION + 1);
+    /// @notice Warp to commitment expiration time
+    function _warpToExpiration(uint256 commitmentId) internal {
+        CommitmentView memory commitment = responseCommitment.commitment(commitmentId);
+        vm.warp(commitment.stoppedAt + TEST_MAX_STOPPED_DURATION + 1);
     }
 
     /// @notice Warp past application response deadline
     function _warpPastDeadline(bytes32 applicationId) internal {
-        ApplicationView memory app = jobCommitment.application(applicationId);
+        ApplicationView memory app = responseCommitment.application(applicationId);
         vm.warp(app.responseDeadline + 1);
     }
 
     // ============ Assertion Helpers ============
 
-    /// @notice Assert job status
-    function _assertJobStatus(uint256 jobId, JobStatus expectedStatus) internal view {
-        JobView memory job = jobCommitment.job(jobId);
-        assertEq(uint8(job.status), uint8(expectedStatus), "Unexpected job status");
+    /// @notice Assert commitment status
+    function _assertCommitmentStatus(uint256 commitmentId, CommitmentStatus expectedStatus) internal view {
+        CommitmentView memory commitment = responseCommitment.commitment(commitmentId);
+        assertEq(uint8(commitment.status), uint8(expectedStatus), "Unexpected commitment status");
     }
 
     /// @notice Assert application responded
     function _assertApplicationResponded(bytes32 applicationId) internal view {
-        ApplicationView memory app = jobCommitment.application(applicationId);
+        ApplicationView memory app = responseCommitment.application(applicationId);
         assertTrue(app.isResponded, "Application should be responded");
     }
 
     /// @notice Get org available balance
     function _getOrgAvailableBalance(uint256 orgId) internal view returns (uint256) {
-        return jobFunds.availableBalance(orgId);
+        return commitmentFunds.availableBalance(orgId);
     }
 
     /// @notice Get org operational balance (total, including locked)
     function _getOrgOperationalBalance(uint256 orgId) internal view returns (uint256) {
-        OrgJobBalance memory balance = jobFunds.jobBalance(orgId);
+        OrgCommitmentBalance memory balance = commitmentFunds.commitmentBalance(orgId);
 
-        return uint256(balance.available) + uint256(balance.stakedInJobs);
+        return uint256(balance.available) + uint256(balance.lockedInCommitments);
     }
 
     /// @notice Derive a packed keyNonce from a scoped one-shot key and nonce zero.
@@ -738,39 +685,32 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         return SafeCast.toUint192(keyNonce >> 64);
     }
 
-    /// @notice Allocate the next job-creation keyNonce.
-    function _nextJobPublishKeyNonce() internal returns (uint256) {
+    /// @notice Allocate the next commitment-creation keyNonce.
+    function _nextCommitmentActivationKeyNonce() internal returns (uint256) {
         creationNonce++;
 
-        return _packKeyNonce(NONCE_SCOPE_JOB_PUBLISH, creationNonce);
+        return _packKeyNonce(NONCE_SCOPE_COMMITMENT_ACTIVATION, creationNonce);
     }
 
-    /// @notice Allocate the next job-close keyNonce.
-    function _nextJobCloseKeyNonce() internal returns (uint256) {
-        closeNonce++;
+    /// @notice Allocate the next commitment-settle keyNonce.
+    function _nextCommitmentSettleKeyNonce() internal returns (uint256) {
+        settleNonce++;
 
-        return _packKeyNonce(NONCE_SCOPE_JOB_CLOSE, closeNonce);
+        return _packKeyNonce(NONCE_SCOPE_COMMITMENT_SETTLEMENT, settleNonce);
     }
 
     /// @notice Allocate the next expired-settlement keyNonce.
     function _nextExpiredSettlementKeyNonce() internal returns (uint256) {
         expiredSettlementNonce++;
 
-        return _packKeyNonce(NONCE_SCOPE_JOB_EXPIRED_SETTLEMENT, expiredSettlementNonce);
+        return _packKeyNonce(NONCE_SCOPE_EXPIRED_COMMITMENT_SETTLEMENT, expiredSettlementNonce);
     }
 
-    /// @notice Allocate the next job-unpublish keyNonce.
-    function _nextJobUnpublishKeyNonce() internal returns (uint256) {
-        unpublishNonce++;
+    /// @notice Allocate the next commitment-stop keyNonce.
+    function _nextCommitmentStopKeyNonce() internal returns (uint256) {
+        stopNonce++;
 
-        return _packKeyNonce(NONCE_SCOPE_JOB_UNPUBLISH, unpublishNonce);
-    }
-
-    /// @notice Allocate the next job content URI update keyNonce.
-    function _nextJobContentURIUpdateKeyNonce() internal returns (uint256) {
-        contentURINonce++;
-
-        return _packKeyNonce(NONCE_SCOPE_JOB_CONTENT_URI_UPDATE, contentURINonce);
+        return _packKeyNonce(NONCE_SCOPE_COMMITMENT_STOP, stopNonce);
     }
 
     /// @notice Allocate a domain-verification keyNonce with deterministic test entropy.
@@ -778,22 +718,5 @@ abstract contract JobCommitmentTestBase is Eip3009TestHelper {
         domainVerificationNonce++;
 
         return _packKeyNonce(NONCE_SCOPE_DOMAIN_VERIFICATION, domainVerificationNonce + salt);
-    }
-
-    // ============ Deployment Helpers ============
-
-    /// @notice Deploy a new JobCommitment instance with custom token
-    function _deployWithToken(IERC20 token) internal returns (JobCommitment) {
-        return new JobCommitment(
-            token,
-            jobFunds,
-            owner,
-            address(forwarder),
-            operator,
-            executor,
-            _defaultJobConfig(),
-            _defaultFeeTiers(),
-            TEST_APPLICANT_STAKE
-        );
     }
 }

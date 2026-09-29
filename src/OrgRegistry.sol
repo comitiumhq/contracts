@@ -8,6 +8,7 @@ import {OrgLifecycle} from "./abstract/OrgLifecycle.sol";
 import {OrgStorageLayout} from "./abstract/OrgStorageLayout.sol";
 import {OwnerControls} from "./abstract/OwnerControls.sol";
 import {OperatorAuthorizer} from "./abstract/OperatorAuthorizer.sol";
+import {OrgAuthorizationLib} from "./libraries/OrgAuthorizationLib.sol";
 
 /// @title OrgRegistry
 /// @notice Manages Comitium organization identity, admins, treasury, and metadata.
@@ -19,10 +20,13 @@ contract OrgRegistry is OwnerControls, OrgLifecycle, IOrgRegistry {
     /// @param owner_ The initial contract owner
     /// @param forwarder_ ERC-2771 forwarder for relayed organization user operations.
     /// @param operator_ The initial EIP-712 signing operator address
-    constructor(address owner_, address forwarder_, address operator_)
+    /// @param executor_ The initial privileged direct-call executor address
+    constructor(address owner_, address forwarder_, address operator_, address executor_)
         OwnerControls(owner_, forwarder_)
         OperatorAuthorizer("OrgRegistry", "1", operator_)
-    {}
+    {
+        _addExecutorChecked(executor_, trustedForwarder());
+    }
 
     /// @dev Use the ERC-2771 actor only where `_actor()` is explicitly called.
     function _actor() internal view override(OwnerControls, OrgStorageLayout) returns (address) {
@@ -32,12 +36,13 @@ contract OrgRegistry is OwnerControls, OrgLifecycle, IOrgRegistry {
     // ============ Organization Lifecycle ============
 
     /// @inheritdoc IOrgRegistry
-    function createOrg(bytes32 domainHash, uint256 keyNonce, uint256 expiry, bytes calldata signature)
+    function createOrg(address creator, bytes32 domainHash, uint256 keyNonce, uint256 expiry, bytes calldata signature)
         external
         whenNotPaused
+        onlyExecutor
         returns (uint256 orgId)
     {
-        return _createOrg(domainHash, keyNonce, expiry, signature, keccak256(_actorCalldata()));
+        return _createOrg(creator, domainHash, keyNonce, expiry, signature, keccak256(msg.data));
     }
 
     /// @inheritdoc IOrgRegistry
@@ -45,12 +50,13 @@ contract OrgRegistry is OwnerControls, OrgLifecycle, IOrgRegistry {
         uint256 orgId,
         bytes32 currentDomainHash,
         bytes32 newDomainHash,
+        address updater,
         uint256 keyNonce,
         uint256 expiry,
         bytes calldata signature
-    ) external {
+    ) external onlyExecutor {
         _updateOrgDomain(
-            orgId, currentDomainHash, newDomainHash, keyNonce, expiry, signature, keccak256(_actorCalldata())
+            orgId, currentDomainHash, newDomainHash, updater, keyNonce, expiry, signature, keccak256(msg.data)
         );
     }
 
@@ -58,7 +64,7 @@ contract OrgRegistry is OwnerControls, OrgLifecycle, IOrgRegistry {
 
     /// @notice Add an EIP-712 signing operator.
     function addOperator(address operator) external onlyOwner {
-        _addOperator(operator);
+        _addOperatorChecked(operator);
     }
 
     /// @notice Remove an EIP-712 signing operator.
@@ -66,16 +72,39 @@ contract OrgRegistry is OwnerControls, OrgLifecycle, IOrgRegistry {
         _removeOperator(operator);
     }
 
+    /// @notice Add a privileged direct-call executor.
+    function addExecutor(address executor) external onlyOwner {
+        _addExecutorChecked(executor, trustedForwarder());
+    }
+
+    /// @notice Remove a privileged direct-call executor.
+    function removeExecutor(address executor) external onlyOwner {
+        _removeExecutor(executor);
+    }
+
     /// @inheritdoc IOrgRegistry
-    function updateContentURI(uint256 orgId, string calldata contentURI) external {
+    function updateContentURI(
+        uint256 orgId,
+        string calldata contentURI,
+        address updater,
+        uint256 keyNonce,
+        uint256 expiry,
+        bytes calldata signature
+    ) external onlyExecutor {
         if (bytes(contentURI).length == 0) revert Errors.EmptyContentURI();
+        if (updater == address(0)) revert Errors.ZeroAddress();
 
-        address actor = _actor();
+        _requireOrg(orgId);
 
-        _requireOrgAdmin(orgId, actor);
+        bytes32 structHash =
+            OrgAuthorizationLib.hashOrgContentUpdate(orgId, keccak256(bytes(contentURI)), updater, keyNonce, expiry);
+
+        _consumeOperatorAuthorization(
+            structHash, OrgAuthorizationLib.NONCE_SCOPE_ORG_CONTENT_UPDATE, keyNonce, expiry, signature
+        );
         _setContentURI(orgId, contentURI);
 
-        emit ContentURIUpdated(orgId, actor, contentURI);
+        emit ContentURIUpdated(orgId, updater, contentURI);
     }
 
     /// @inheritdoc IOrgRegistry
@@ -130,6 +159,16 @@ contract OrgRegistry is OwnerControls, OrgLifecycle, IOrgRegistry {
     /// @inheritdoc IOrgRegistry
     function operators() external view returns (address[] memory operators_) {
         return _operatorsList();
+    }
+
+    /// @inheritdoc IOrgRegistry
+    function isExecutor(address account) external view returns (bool) {
+        return _isExecutor(account);
+    }
+
+    /// @inheritdoc IOrgRegistry
+    function executors() external view returns (address[] memory executors_) {
+        return _executorsList();
     }
 
     /// @inheritdoc IOrgRegistry

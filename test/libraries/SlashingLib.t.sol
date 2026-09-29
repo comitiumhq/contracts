@@ -183,7 +183,7 @@ contract SlashingLibTest is Test {
     }
 
     // ============ calculateSoftSlashRate Tests ============
-    // Soft slashing rate used for closeJob() when all applications responded but some late
+    // Soft slashing rate used for settleCommitment() when all applications responded but some late
 
     function test_lateSlash_100percent_onTime() public view {
         // 100% on-time = 0% slash

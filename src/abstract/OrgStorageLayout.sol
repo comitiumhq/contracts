@@ -6,11 +6,11 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {Errors} from "../Errors.sol";
 import {Org, TreasuryTransfer} from "../types/OrgTypes.sol";
 import {ContentURIRegistry} from "./ContentURIRegistry.sol";
-import {OperatorAuthorizer} from "./OperatorAuthorizer.sol";
+import {ContractRoles} from "./ContractRoles.sol";
 
 /// @title OrgStorageLayout
 /// @notice Shared plain storage layout for OrgRegistry modules.
-abstract contract OrgStorageLayout is OperatorAuthorizer, ContentURIRegistry {
+abstract contract OrgStorageLayout is ContractRoles, ContentURIRegistry {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @notice Counter for org IDs (starts at 1).

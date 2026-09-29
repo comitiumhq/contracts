@@ -3,7 +3,7 @@ pragma solidity 0.8.35;
 
 import {Test} from "forge-std/Test.sol";
 
-import {JobFunds} from "../../src/JobFunds.sol";
+import {CommitmentFunds} from "../../src/CommitmentFunds.sol";
 
 interface IEip3009TestToken {
     function mint(address to, uint256 amount) external;
@@ -18,7 +18,7 @@ abstract contract Eip3009TestHelper is Test {
     uint256 private _authorizationNonce;
 
     function _fundAndDepositWithAuthorization(
-        JobFunds jobFunds,
+        CommitmentFunds commitmentFunds,
         address token,
         uint256 treasuryPrivateKey,
         uint256 orgId,
@@ -29,12 +29,12 @@ abstract contract Eip3009TestHelper is Test {
         uint256 validBefore = block.timestamp + 1 hours;
         bytes32 nonce = keccak256(abi.encode(address(this), ++_authorizationNonce));
         (uint8 v, bytes32 r, bytes32 s) = _signReceiveWithAuthorization(
-            token, address(jobFunds), treasuryPrivateKey, amount, validAfter, validBefore, nonce
+            token, address(commitmentFunds), treasuryPrivateKey, amount, validAfter, validBefore, nonce
         );
 
         IEip3009TestToken(token).mint(treasury, amount);
         vm.prank(treasury);
-        jobFunds.depositWithAuthorization(orgId, amount, validAfter, validBefore, nonce, v, r, s);
+        commitmentFunds.depositWithAuthorization(orgId, amount, validAfter, validBefore, nonce, v, r, s);
     }
 
     function _signReceiveWithAuthorization(

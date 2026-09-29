@@ -8,19 +8,19 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.sol";
 
 import {OrgRegistry} from "../src/OrgRegistry.sol";
-import {JobCommitment} from "../src/JobCommitment.sol";
-import {JobFunds} from "../src/JobFunds.sol";
+import {ResponseCommitment} from "../src/ResponseCommitment.sol";
+import {CommitmentFunds} from "../src/CommitmentFunds.sol";
 import {IERC3009} from "../src/interfaces/IERC3009.sol";
 import {IOrgRegistry} from "../src/interfaces/IOrgRegistry.sol";
-import {FeeTier, JobConfig, SlashingTable} from "../src/types/ConfigTypes.sol";
+import {FeeTier, CommitmentConfig, SlashingTable} from "../src/types/ConfigTypes.sol";
 import {
     BaseScript,
     DeploymentConfigHashes,
     DeploymentContractSet,
     DeploymentOrgRegistry,
-    DeploymentJobFunds,
-    DeploymentJobCommitment,
-    InitialDeploymentCatalog
+    DeploymentCommitmentFunds,
+    DeploymentResponseCommitment,
+    DeploymentCatalog
 } from "./Base.s.sol";
 
 error UnsupportedChain(uint256 chainId);
@@ -39,8 +39,8 @@ error ProtocolRolesOverlap(address account);
 error MainnetGitCommitRequired();
 error FeeRecipientMatchesOwner(address account);
 
-/// @title Deploy Full System (OrgRegistry + JobFunds + JobCommitment)
-/// @notice Deploys immutable registry, job funds, and initial commitment.
+/// @title Deploy Comitium contracts
+/// @notice Deploys one complete immutable contract set.
 /// @dev
 ///   forge script script/Deploy.s.sol --rpc-url $BASE_SEPOLIA_RPC_URL --broadcast
 ///   forge script script/Deploy.s.sol --rpc-url $BASE_MAINNET_RPC_URL --account $DEPLOYER_ACCOUNT --broadcast --verify
@@ -59,13 +59,13 @@ contract Deploy is BaseScript, Test {
         bool isMainnet;
     }
 
-    function _defaultJobConfig() internal pure returns (JobConfig memory) {
-        return JobConfig({
+    function _defaultCommitmentConfig() internal pure returns (CommitmentConfig memory) {
+        return CommitmentConfig({
             minStake: 50_000_000,
             tierCount: 3,
             maxBatchSize: 50,
-            maxUnpublishedDuration: uint32(90 days),
-            maxPublishedDuration: uint32(365 days),
+            maxStoppedDuration: uint32(90 days),
+            maxActiveDuration: uint32(365 days),
             harshSlashing: SlashingTable({
                 zeroResponseRate: 10000,
                 below50Rate: 5000,
@@ -179,6 +179,7 @@ contract Deploy is BaseScript, Test {
 
     function _preflight(
         ChainDeployConfig memory config,
+        address usdc,
         address deployer,
         address feeRecipient,
         address operator,
@@ -188,7 +189,7 @@ contract Deploy is BaseScript, Test {
         if (block.chainid != LOCAL_CHAIN_ID) _assertDeploymentCatalogDoesNotExist();
 
         _requireNonZeroAddress(deployer, "DEPLOYER_ADDRESS");
-        _validateStakeToken(config.expectedStakeToken, config);
+        _validateStakeToken(usdc, config);
         _requireNonZeroAddress(feeRecipient, "FEE_RECIPIENT_ADDRESS");
         _requireNonZeroAddress(ownerAddress, "OWNER_ADDRESS");
         _validateFeeRecipient(feeRecipient, ownerAddress);
@@ -206,20 +207,20 @@ contract Deploy is BaseScript, Test {
         // ── Config ──────────────────────────────────────────────────────
         ChainDeployConfig memory config = _chainDeployConfig();
         address deployer = vm.envAddress("DEPLOYER_ADDRESS");
-        address usdc = config.expectedStakeToken;
+        address usdc =
+            config.expectedStakeToken == address(0) ? vm.envAddress("STAKE_TOKEN_ADDRESS") : config.expectedStakeToken;
         address feeRecipient = vm.envAddress("FEE_RECIPIENT_ADDRESS");
         address operator = vm.envAddress("OPERATOR_ADDRESS");
         address executor = vm.envAddress("RELAYER_ADDRESS");
         address ownerAddress = vm.envAddress("OWNER_ADDRESS");
         address[] memory initialOperators = _singleAddressSet(operator);
         address[] memory initialExecutors = _singleAddressSet(executor);
-        JobConfig memory jobConfig = _defaultJobConfig();
+        CommitmentConfig memory commitmentConfig = _defaultCommitmentConfig();
         FeeTier[] memory feeTiers = _defaultFeeTiers();
-        uint96 applicantStakeAmount = 3_000_000;
         uint256 startBlock = block.number;
         string memory gitCommit = vm.envOr("GIT_COMMIT", string(""));
 
-        _preflight(config, deployer, feeRecipient, operator, executor, ownerAddress);
+        _preflight(config, usdc, deployer, feeRecipient, operator, executor, ownerAddress);
 
         console.log("=== Deploying Comitium ===");
         console.log("Chain ID:", block.chainid);
@@ -241,44 +242,37 @@ contract Deploy is BaseScript, Test {
         console.log("  Address:", address(forwarder));
 
         // ── 2. OrgRegistry ─────────────────────────────────────
-        OrgRegistry registry = new OrgRegistry(deployer, address(forwarder), operator);
+        OrgRegistry registry = new OrgRegistry(deployer, address(forwarder), operator, executor);
 
         console.log("[OrgRegistry]");
         console.log("  Address:", address(registry));
 
-        // ── 3. JobFunds ──────────────────────────────────────────
-        JobFunds jobFunds =
-            new JobFunds(IERC20(usdc), IOrgRegistry(address(registry)), feeRecipient, deployer, address(forwarder));
-
-        console.log("[JobFunds]");
-        console.log("  Address:", address(jobFunds));
-
-        // ── 4. JobCommitment ────────────────────────────────────────────
-        JobCommitment jc = new JobCommitment(
-            IERC20(usdc),
-            jobFunds,
-            deployer,
-            address(forwarder),
-            operator,
-            executor,
-            jobConfig,
-            feeTiers,
-            applicantStakeAmount
+        // ── 3. CommitmentFunds ───────────────────────────────────
+        CommitmentFunds commitmentFunds = new CommitmentFunds(
+            IERC20(usdc), IOrgRegistry(address(registry)), feeRecipient, deployer, address(forwarder)
         );
 
-        console.log("[JobCommitment]");
-        console.log("  Address:", address(jc));
+        console.log("[CommitmentFunds]");
+        console.log("  Address:", address(commitmentFunds));
+
+        // ── 4. ResponseCommitment ────────────────────────────────
+        ResponseCommitment commitment = new ResponseCommitment(
+            commitmentFunds, deployer, address(forwarder), operator, executor, commitmentConfig, feeTiers
+        );
+
+        console.log("[ResponseCommitment]");
+        console.log("  Address:", address(commitment));
 
         // ── 5. Link contracts ───────────────────────────────────────────
-        jobFunds.registerJobCommitment(address(jc), jc.commitmentVersion());
-        jobFunds.setCurrentJobCommitment(address(jc));
+        commitmentFunds.registerResponseCommitment(address(commitment), commitment.commitmentVersion());
+        commitmentFunds.setCurrentResponseCommitment(address(commitment));
         console.log("");
-        console.log("Linked: jobFunds currentJobCommitment = %s", address(jc));
+        console.log("Linked: commitmentFunds currentResponseCommitment = %s", address(commitment));
 
         // ── 6. Transfer ownership ─────────────────────────────────────
         registry.transferOwnership(ownerAddress);
-        jobFunds.transferOwnership(ownerAddress);
-        jc.transferOwnership(ownerAddress);
+        commitmentFunds.transferOwnership(ownerAddress);
+        commitment.transferOwnership(ownerAddress);
         console.log("");
         console.log("Ownership transfer initiated to: %s", ownerAddress);
         console.log(">> Owner must call acceptOwnership() on all contracts to complete");
@@ -293,36 +287,41 @@ contract Deploy is BaseScript, Test {
         assertEq(registry.owner(), deployer, "registry: wrong owner");
         assertEq(registry.trustedForwarder(), address(forwarder), "registry: wrong forwarder");
         assertTrue(registry.isOperator(operator), "registry: operator not set");
+        assertTrue(registry.isExecutor(executor), "registry: executor not set");
+        assertFalse(registry.isExecutor(operator), "registry: operator is executor");
+        assertFalse(registry.isOperator(executor), "registry: executor is operator");
 
-        // JobFunds
-        assertEq(jobFunds.owner(), deployer, "jobFunds: wrong owner");
-        assertEq(address(jobFunds.stakeToken()), usdc, "jobFunds: wrong stakeToken");
-        assertEq(address(jobFunds.orgRegistry()), address(registry), "jobFunds: wrong registry");
-        assertEq(jobFunds.feeRecipient(), feeRecipient, "jobFunds: wrong feeRecipient");
-        assertEq(jobFunds.trustedForwarder(), address(forwarder), "jobFunds: wrong forwarder");
-        assertEq(jobFunds.currentJobCommitment(), address(jc), "jobFunds: wrong currentJobCommitment");
+        // CommitmentFunds
+        assertEq(commitmentFunds.owner(), deployer, "commitmentFunds: wrong owner");
+        assertEq(address(commitmentFunds.stakeToken()), usdc, "commitmentFunds: wrong stakeToken");
+        assertEq(address(commitmentFunds.orgRegistry()), address(registry), "commitmentFunds: wrong registry");
+        assertEq(commitmentFunds.feeRecipient(), feeRecipient, "commitmentFunds: wrong feeRecipient");
+        assertEq(commitmentFunds.trustedForwarder(), address(forwarder), "commitmentFunds: wrong forwarder");
+        assertEq(
+            commitmentFunds.currentResponseCommitment(),
+            address(commitment),
+            "commitmentFunds: wrong currentResponseCommitment"
+        );
 
-        // JobCommitment
-        assertEq(jc.owner(), deployer, "jc: wrong owner");
-        assertEq(address(jc.stakeToken()), usdc, "jc: wrong stakeToken");
-        assertTrue(jc.isOperator(operator), "jc: operator not set");
-        assertTrue(jc.isExecutor(executor), "jc: executor not set");
-        assertFalse(jc.isExecutor(operator), "jc: operator is executor");
-        assertFalse(jc.isOperator(executor), "jc: executor is operator");
-        assertEq(address(jc.jobFunds()), address(jobFunds), "jc: wrong jobFunds");
-        assertEq(jc.trustedForwarder(), address(forwarder), "jc: wrong forwarder");
-        assertEq(jc.applicantStakeAmount(), applicantStakeAmount, "jc: wrong applicant stake amount");
+        // ResponseCommitment
+        assertEq(commitment.owner(), deployer, "commitment: wrong owner");
+        assertTrue(commitment.isOperator(operator), "commitment: operator not set");
+        assertTrue(commitment.isExecutor(executor), "commitment: executor not set");
+        assertFalse(commitment.isExecutor(operator), "commitment: operator is executor");
+        assertFalse(commitment.isOperator(executor), "commitment: executor is operator");
+        assertEq(address(commitment.commitmentFunds()), address(commitmentFunds), "commitment: wrong commitmentFunds");
+        assertEq(commitment.trustedForwarder(), address(forwarder), "commitment: wrong forwarder");
 
         // Ownership transfer
         assertEq(registry.pendingOwner(), ownerAddress, "registry: wrong pendingOwner");
-        assertEq(jobFunds.pendingOwner(), ownerAddress, "jobFunds: wrong pendingOwner");
-        assertEq(jc.pendingOwner(), ownerAddress, "jc: wrong pendingOwner");
+        assertEq(commitmentFunds.pendingOwner(), ownerAddress, "commitmentFunds: wrong pendingOwner");
+        assertEq(commitment.pendingOwner(), ownerAddress, "commitment: wrong pendingOwner");
         console.log("Pending owner: %s", ownerAddress);
 
         console.log("All checks passed!");
 
         // ── 8. Save deployment catalog ──────────────────────────────────
-        InitialDeploymentCatalog memory deploymentCatalog = InitialDeploymentCatalog({
+        DeploymentCatalog memory deploymentCatalog = DeploymentCatalog({
             deploymentSetVersion: 1,
             network: config.network,
             deployer: deployer,
@@ -337,30 +336,30 @@ contract Deploy is BaseScript, Test {
                     address_: address(registry),
                     domainSeparator: registry.DOMAIN_SEPARATOR(),
                     initialOwner: ownerAddress,
-                    initialOperators: initialOperators
+                    initialOperators: initialOperators,
+                    initialExecutors: initialExecutors
                 }),
-                jobFunds: DeploymentJobFunds({
-                    address_: address(jobFunds), initialOwner: ownerAddress, initialFeeRecipient: feeRecipient
+                commitmentFunds: DeploymentCommitmentFunds({
+                    address_: address(commitmentFunds), initialOwner: ownerAddress, initialFeeRecipient: feeRecipient
                 }),
-                jobCommitment: DeploymentJobCommitment({
-                    commitmentVersion: jc.commitmentVersion(),
-                    address_: address(jc),
+                responseCommitment: DeploymentResponseCommitment({
+                    commitmentVersion: commitment.commitmentVersion(),
+                    address_: address(commitment),
                     startBlock: startBlock,
-                    domainSeparator: jc.DOMAIN_SEPARATOR(),
-                    runtimeCodeHash: address(jc).codehash,
+                    domainSeparator: commitment.DOMAIN_SEPARATOR(),
+                    runtimeCodeHash: address(commitment).codehash,
                     initialOwner: ownerAddress,
                     initialOperators: initialOperators,
                     initialExecutors: initialExecutors,
                     initialConfigHashes: DeploymentConfigHashes({
-                        jobConfig: keccak256(abi.encode(jobConfig)),
-                        feeTiers: keccak256(abi.encode(feeTiers)),
-                        applicantStakeAmount: keccak256(abi.encode(jc.applicantStakeAmount()))
+                        commitmentConfig: keccak256(abi.encode(commitmentConfig)),
+                        feeTiers: keccak256(abi.encode(feeTiers))
                     })
                 })
             })
         });
 
-        if (_shouldSaveDeploymentCatalog()) _saveInitialDeploymentCatalog(deploymentCatalog);
+        if (_shouldSaveDeploymentCatalog()) _saveDeploymentCatalog(deploymentCatalog);
         else console.log("Catalog save skipped: set SAVE_DEPLOYMENT_CATALOG=true to write deployments JSON");
 
         console.log("");

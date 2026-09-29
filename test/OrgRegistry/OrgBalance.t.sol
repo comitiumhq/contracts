@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import {IJobFunds, OrgJobBalance} from "../../src/interfaces/IJobFunds.sol";
+import {ICommitmentFunds, OrgCommitmentBalance} from "../../src/interfaces/ICommitmentFunds.sol";
 import {Errors} from "../../src/Errors.sol";
 
 import {OrgTestBase} from "../shared/OrgTestBase.sol";
@@ -14,8 +14,8 @@ contract OrgBalanceTest is OrgTestBase {
         orgId = _createOrg(orgOwner1, "test.com");
 
         vm.startPrank(contractOwner);
-        jobFunds.registerJobCommitment(address(this), 1);
-        jobFunds.setCurrentJobCommitment(address(this));
+        commitmentFunds.registerResponseCommitment(address(this), 1);
+        commitmentFunds.setCurrentResponseCommitment(address(this));
         vm.stopPrank();
     }
 
@@ -23,22 +23,22 @@ contract OrgBalanceTest is OrgTestBase {
         uint256 amount = 10_000_000_000;
         _fundAndDeposit(orgId, orgOwner1, amount);
 
-        OrgJobBalance memory balance = jobFunds.jobBalance(orgId);
+        OrgCommitmentBalance memory balance = commitmentFunds.commitmentBalance(orgId);
         assertEq(balance.available, amount);
-        assertEq(balance.stakedInJobs, 0);
-        assertEq(jobFunds.availableBalance(orgId), amount);
+        assertEq(balance.lockedInCommitments, 0);
+        assertEq(commitmentFunds.availableBalance(orgId), amount);
     }
 
     function test_depositWithAuthorization_revert_notOrgTreasury() public {
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(Errors.NotOrgTreasury.selector, orgId, stranger));
-        jobFunds.depositWithAuthorization(orgId, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
+        commitmentFunds.depositWithAuthorization(orgId, 1_000_000, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
     }
 
     function test_depositWithAuthorization_revert_zeroAmount() public {
         vm.prank(orgOwner1);
         vm.expectRevert(Errors.ZeroAmount.selector);
-        jobFunds.depositWithAuthorization(orgId, 0, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
+        commitmentFunds.depositWithAuthorization(orgId, 0, 0, block.timestamp + 1 hours, bytes32(0), 0, 0, 0);
     }
 
     function test_withdrawStake() public {
@@ -49,10 +49,10 @@ contract OrgBalanceTest is OrgTestBase {
         uint256 balBefore = usdc.balanceOf(orgOwner1);
 
         vm.prank(orgOwner1);
-        jobFunds.withdraw(orgId, withdrawAmount);
+        commitmentFunds.withdraw(orgId, withdrawAmount);
 
         assertEq(usdc.balanceOf(orgOwner1), balBefore + withdrawAmount);
-        assertEq(jobFunds.availableBalance(orgId), depositAmount - withdrawAmount);
+        assertEq(commitmentFunds.availableBalance(orgId), depositAmount - withdrawAmount);
     }
 
     function test_withdraw_afterTreasuryRotation_sendsToCurrentTreasury() public {
@@ -74,11 +74,11 @@ contract OrgBalanceTest is OrgTestBase {
         uint256 newTreasuryBalanceBefore = usdc.balanceOf(newTreasury);
 
         vm.prank(newTreasury);
-        jobFunds.withdraw(orgId, depositAmount);
+        commitmentFunds.withdraw(orgId, depositAmount);
 
         assertEq(usdc.balanceOf(orgOwner1), oldTreasuryBalanceBefore);
         assertEq(usdc.balanceOf(newTreasury), newTreasuryBalanceBefore + depositAmount);
-        assertEq(jobFunds.availableBalance(orgId), 0);
+        assertEq(commitmentFunds.availableBalance(orgId), 0);
     }
 
     function test_withdraw_emitsEvent() public {
@@ -86,10 +86,10 @@ contract OrgBalanceTest is OrgTestBase {
         _fundAndDeposit(orgId, orgOwner1, depositAmount);
 
         vm.expectEmit(true, true, true, true);
-        emit IJobFunds.JobFundsWithdrawn(orgId, orgOwner1, 1_000_000_000);
+        emit ICommitmentFunds.CommitmentFundsWithdrawn(orgId, orgOwner1, 1_000_000_000);
 
         vm.prank(orgOwner1);
-        jobFunds.withdraw(orgId, 1_000_000_000);
+        commitmentFunds.withdraw(orgId, 1_000_000_000);
     }
 
     function test_withdraw_revert_insufficientBalance() public {
@@ -98,7 +98,7 @@ contract OrgBalanceTest is OrgTestBase {
 
         vm.prank(orgOwner1);
         vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, depositAmount + 1, depositAmount));
-        jobFunds.withdraw(orgId, depositAmount + 1);
+        commitmentFunds.withdraw(orgId, depositAmount + 1);
     }
 
     function test_withdraw_cannotWithdrawMoreThanAvailable() public {
@@ -106,15 +106,15 @@ contract OrgBalanceTest is OrgTestBase {
         _fundAndDeposit(orgId, orgOwner1, depositAmount);
 
         uint256 lockAmount = 5_000_000_000;
-        _publishTestJob(address(this), orgId, orgOwner1, lockAmount, 0);
+        _activateTestCommitment(address(this), orgId, orgOwner1, lockAmount, 0);
 
         uint256 available = depositAmount - lockAmount;
         vm.prank(orgOwner1);
-        jobFunds.withdraw(orgId, available);
+        commitmentFunds.withdraw(orgId, available);
 
         vm.prank(orgOwner1);
         vm.expectRevert(abi.encodeWithSelector(Errors.InsufficientBalance.selector, 1, 0));
-        jobFunds.withdraw(orgId, 1);
+        commitmentFunds.withdraw(orgId, 1);
     }
 
     function test_withdraw_revert_notOrgTreasury() public {
@@ -122,12 +122,12 @@ contract OrgBalanceTest is OrgTestBase {
 
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(Errors.NotOrgTreasury.selector, orgId, stranger));
-        jobFunds.withdraw(orgId, 1_000_000);
+        commitmentFunds.withdraw(orgId, 1_000_000);
     }
 
     function test_withdraw_revert_zeroAmount() public {
         vm.prank(orgOwner1);
         vm.expectRevert(Errors.ZeroAmount.selector);
-        jobFunds.withdraw(orgId, 0);
+        commitmentFunds.withdraw(orgId, 0);
     }
 }

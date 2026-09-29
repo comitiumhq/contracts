@@ -1,10 +1,9 @@
 {
-  "close job (1 responded application)": "102622",
-  "create organization": "176779",
-  "deposit job funds (EIP-3009)": "84179",
-  "publish job": "274656",
-  "record application response": "33055",
-  "settle expired job (1 unanswered application)": "135036",
-  "submit application": "163755",
-  "withdraw applicant stake": "44619"
+  "activate commitment": "273152",
+  "create organization": "179178",
+  "deposit commitment funds (EIP-3009)": "84282",
+  "record application response": "52086",
+  "settle commitment (1 responded application)": "103176",
+  "settle expired commitment (1 unanswered application)": "135058",
+  "submit application": "81828"
 }

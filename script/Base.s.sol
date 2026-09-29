@@ -10,9 +10,8 @@ error DeploymentCatalogWriteDuringDryRun(string path);
 error UnsupportedDeploymentCatalogSchema(uint256 schemaVersion);
 
 struct DeploymentConfigHashes {
-    bytes32 jobConfig;
+    bytes32 commitmentConfig;
     bytes32 feeTiers;
-    bytes32 applicantStakeAmount;
 }
 
 struct DeploymentOrgRegistry {
@@ -20,15 +19,16 @@ struct DeploymentOrgRegistry {
     bytes32 domainSeparator;
     address initialOwner;
     address[] initialOperators;
+    address[] initialExecutors;
 }
 
-struct DeploymentJobFunds {
+struct DeploymentCommitmentFunds {
     address address_;
     address initialOwner;
     address initialFeeRecipient;
 }
 
-struct DeploymentJobCommitment {
+struct DeploymentResponseCommitment {
     uint32 commitmentVersion;
     address address_;
     uint256 startBlock;
@@ -43,11 +43,11 @@ struct DeploymentJobCommitment {
 struct DeploymentContractSet {
     address forwarder;
     DeploymentOrgRegistry orgRegistry;
-    DeploymentJobFunds jobFunds;
-    DeploymentJobCommitment jobCommitment;
+    DeploymentCommitmentFunds commitmentFunds;
+    DeploymentResponseCommitment responseCommitment;
 }
 
-struct InitialDeploymentCatalog {
+struct DeploymentCatalog {
     uint256 deploymentSetVersion;
     string network;
     address deployer;
@@ -128,15 +128,11 @@ abstract contract BaseScript is Script {
         vm.writeJson(json, file, _deploymentPath());
     }
 
-    function _saveInitialDeploymentCatalog(InitialDeploymentCatalog memory catalog) internal {
-        _saveDeployment(_initialDeploymentCatalogJson(catalog));
+    function _saveDeploymentCatalog(DeploymentCatalog memory catalog) internal {
+        _saveDeployment(_deploymentCatalogJson(catalog));
     }
 
-    function _initialDeploymentCatalogJson(InitialDeploymentCatalog memory catalog)
-        private
-        pure
-        returns (string memory)
-    {
+    function _deploymentCatalogJson(DeploymentCatalog memory catalog) private pure returns (string memory) {
         return string.concat(
             '{"deploymentSetVersion":',
             vm.toString(catalog.deploymentSetVersion),
@@ -166,10 +162,10 @@ abstract contract BaseScript is Script {
             _quoted(vm.toString(contracts_.forwarder)),
             ',"orgRegistry":',
             _orgRegistryJson(contracts_.orgRegistry),
-            ',"jobFunds":',
-            _jobFundsJson(contracts_.jobFunds),
-            ',"jobCommitments":[',
-            _jobCommitmentJson(contracts_.jobCommitment),
+            ',"commitmentFunds":',
+            _commitmentFundsJson(contracts_.commitmentFunds),
+            ',"responseCommitments":[',
+            _responseCommitmentJson(contracts_.responseCommitment),
             "]}"
         );
     }
@@ -184,11 +180,13 @@ abstract contract BaseScript is Script {
             _quoted(vm.toString(registry.initialOwner)),
             ',"initialOperators":',
             _addressArrayJson(registry.initialOperators),
+            ',"initialExecutors":',
+            _addressArrayJson(registry.initialExecutors),
             "}"
         );
     }
 
-    function _jobFundsJson(DeploymentJobFunds memory funds) private pure returns (string memory) {
+    function _commitmentFundsJson(DeploymentCommitmentFunds memory funds) private pure returns (string memory) {
         return string.concat(
             '{"address":',
             _quoted(vm.toString(funds.address_)),
@@ -200,7 +198,11 @@ abstract contract BaseScript is Script {
         );
     }
 
-    function _jobCommitmentJson(DeploymentJobCommitment memory commitment) private pure returns (string memory) {
+    function _responseCommitmentJson(DeploymentResponseCommitment memory commitment)
+        private
+        pure
+        returns (string memory)
+    {
         return string.concat(
             '{"commitmentVersion":',
             vm.toString(commitment.commitmentVersion),
@@ -226,12 +228,10 @@ abstract contract BaseScript is Script {
 
     function _configHashesJson(DeploymentConfigHashes memory hashes) private pure returns (string memory) {
         return string.concat(
-            '{"jobConfig":',
-            _quoted(vm.toString(hashes.jobConfig)),
+            '{"commitmentConfig":',
+            _quoted(vm.toString(hashes.commitmentConfig)),
             ',"feeTiers":',
             _quoted(vm.toString(hashes.feeTiers)),
-            ',"applicantStakeAmount":',
-            _quoted(vm.toString(hashes.applicantStakeAmount)),
             "}"
         );
     }
