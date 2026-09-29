@@ -1,9 +1,9 @@
 {
-  "activate commitment": "273074",
-  "create organization": "176779",
-  "deposit commitment funds (EIP-3009)": "84212",
+  "activate commitment": "273152",
+  "create organization": "179178",
+  "deposit commitment funds (EIP-3009)": "84282",
   "record application response": "52086",
-  "settle commitment (1 responded application)": "103124",
+  "settle commitment (1 responded application)": "103176",
   "settle expired commitment (1 unanswered application)": "135058",
   "submit application": "81828"
 }
