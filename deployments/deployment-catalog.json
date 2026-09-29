@@ -1,4 +1,55 @@
 {
   "schemaVersion": 1,
-  "deployments": {}
+  "deployments": {
+    "84532": {
+      "deploymentSetVersion": 1,
+      "network": "base_sepolia",
+      "deployer": "0x94b391990C65A24c3FB2a86f9a3B6774990C1C1A",
+      "stakeToken": "0x61479Fd8c77084d715D72A1E417fd48A92002819",
+      "startBlock": 47388455,
+      "deployedAtBlock": 47388455,
+      "deployedAtTimestamp": 1790545198,
+      "gitCommit": "f2e66e6",
+      "script": "script/Deploy.s.sol",
+      "contracts": {
+        "forwarder": "0x778f4980b4535D0aD6803F611f7541e8DC63E53D",
+        "orgRegistry": {
+          "address": "0x581eC9F9FFFf468444bDfb92c1E551C998255600",
+          "domainSeparator": "0x6b9be01eb9928ff7c177978ebc9c9023bc083dc6be4290cd53b9edc59f0a0752",
+          "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
+          "initialOperators": [
+            "0xc3c8F6dAD80E1aDe28F850f534cD7239589d486c"
+          ],
+          "initialExecutors": [
+            "0xC008ce3b02CC1F82DFCFaee18ef8eD9f5fDa9ecA"
+          ]
+        },
+        "commitmentFunds": {
+          "address": "0xc5D2517501fd6030DC70a66Dd4382e276e3c7a1a",
+          "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
+          "initialFeeRecipient": "0x50DFC7e7893c7567fA638880e46e5525C9480193"
+        },
+        "responseCommitments": [
+          {
+            "commitmentVersion": 1,
+            "address": "0x7F665ce23cb5212dc2371c7CDEcC855542FcFfeE",
+            "startBlock": 47388455,
+            "domainSeparator": "0xde6f3ace7b104b22580b51fc1f7888fb166657fb98eb7d58f89631eaa1c8abd8",
+            "runtimeCodeHash": "0x5a16897d23bd464788866050be10e8de389f220c46f1670ca0c53834b446cb17",
+            "initialOwner": "0xFCa745329B76327a980C06c1b6deC0c21ABa6C37",
+            "initialOperators": [
+              "0xc3c8F6dAD80E1aDe28F850f534cD7239589d486c"
+            ],
+            "initialExecutors": [
+              "0xC008ce3b02CC1F82DFCFaee18ef8eD9f5fDa9ecA"
+            ],
+            "initialConfigHashes": {
+              "commitmentConfig": "0x53440e4f5ffccf154dd40ca2fdaebc06469454f61c0bfaff62caca830f87f0e1",
+              "feeTiers": "0xe20f9a582cf02046acab7727777bc959d8ec822656f7adb896ff5c934c9bf03a"
+            }
+          }
+        ]
+      }
+    }
+  }
 }
