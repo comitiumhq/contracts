@@ -6,8 +6,8 @@ This repository owns Comitium's Solidity protocol, contract tests, deployment sc
 
 Before editing, read `../PRODUCT.md`, the relevant contract architecture, and its ADRs:
 
-- `../comitium-docs/architecture/job-commitment-architecture.md`;
-- `../comitium-docs/architecture/job-funds-architecture.md`;
+- `../comitium-docs/architecture/response-commitment-architecture.md`;
+- `../comitium-docs/architecture/commitment-funds-architecture.md`;
 - `../comitium-docs/architecture/organization-registry-architecture.md`;
 - `../comitium-docs/architecture/contract-versioning-and-deployment.md`;
 - `../comitium-docs/architecture/indexer-event-projections.md` when events change;
